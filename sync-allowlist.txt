@@ -1,0 +1,53 @@
+# sync-allowlist.txt — what is allowed to live inside each recursively-synced
+# directory from sync-manifest.txt. capture.ps1 validates the LIVE folders
+# against this BEFORE copying and aborts the whole capture on any unlisted file.
+#
+# WHY: this repo backs up GLOBAL agent configuration only. Project/session
+# files (memory dumps, session wrap-ups, project notes) belong in their
+# project's own repo — an unlisted file here is treated as a stray, never
+# silently synced. (A project session note swept into ai-instructions/ is
+# exactly how a project's payments session-note once polluted this repo.)
+#
+# Format: <repo-relative-dir> | <home-relative glob>      (# comments allowed)
+#   *  matches within one path segment; ** crosses segments.
+# Doc-bearing dirs are enumerated file-by-file ON PURPOSE — adding a new doc
+# means adding a line here. That is the guard working, not friction.
+
+# --- ~/.ai-instructions/ : global rule docs (enumerated), templates, tools ---
+ai-instructions/ | code-quality.md
+ai-instructions/ | git-safety.md
+ai-instructions/ | hooks-reference.md
+ai-instructions/ | multi-agent-coordination.md
+ai-instructions/ | parallel-agents.md
+ai-instructions/ | planning.md
+ai-instructions/ | project-setup.md
+ai-instructions/ | renames-and-schema-changes.md
+ai-instructions/ | supabase-operations.md
+ai-instructions/ | worktree-operations.md
+# *.local.md = machine- or project-specific. Synced to THIS private repo so it
+# is backed up, but excluded from any PUBLIC copy of the instruction set. Real
+# project names, absolute paths, project refs and incident detail belong here —
+# never in the enumerated generic docs above.
+ai-instructions/ | *.local.md
+ai-instructions/ | templates/.gitignore-additions.md
+ai-instructions/ | templates/MEMORY.md
+ai-instructions/ | templates/PROJECT_SCOPE.md
+ai-instructions/ | templates/WORKBOARD.md
+ai-instructions/ | templates/plans/INDEX.md
+ai-instructions/ | templates/plans/phase-template.md
+ai-instructions/ | tools/*.py
+ai-instructions/ | tools/*.cmd
+
+# --- hook dirs: executable hook scripts only, no docs/notes ---
+claude/hooks/ | *.py
+claude/hooks/ | *.sh
+claude/hooks/ | *.ps1
+claude/hooks/ | *.cmd
+gemini/hooks/ | *.py
+gemini/hooks/ | *.sh
+gemini/hooks/ | *.ps1
+gemini/hooks/ | *.cmd
+codex/hooks/ | *.py
+codex/hooks/ | *.sh
+codex/hooks/ | *.ps1
+codex/hooks/ | *.cmd
