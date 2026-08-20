@@ -55,10 +55,17 @@ When starting work on any project, check if the project-level files exist. If AN
 | `PROJECT_SCOPE.md` | `~/.ai-instructions/templates/PROJECT_SCOPE.md` | Yes |
 | `plans/INDEX.md` | `~/.ai-instructions/templates/plans/INDEX.md` | Yes |
 | `MEMORY.md` | `~/.ai-instructions/templates/MEMORY.md` | No — add to `.gitignore` |
-| `WORKBOARD.md` | `~/.ai-instructions/templates/WORKBOARD.md` | No — add to `.gitignore` |
+| `WORKBOARD.md` | `~/.ai-instructions/templates/WORKBOARD.md` | No — add to `.gitignore` (plus its `.lock`, `.json`, and `PROGRESS.*` — see below) |
 
 - Copy the template, replace `[Project Name]` with the actual project name, and fill in what you can from reading the codebase (tech stack, folder structure, etc.).
-- If `.gitignore` exists but doesn't include `MEMORY.md` and `WORKBOARD.md`, add them.
+- Ensure `.gitignore` ignores ALL local, auto-generated coordination state — not
+  just `WORKBOARD.md`/`MEMORY.md` but also `WORKBOARD.md.lock`, `WORKBOARD.json`,
+  `PROGRESS.md`, `PROGRESS.json` (copy `templates/.gitignore-additions.md`). These
+  are regenerated on every board write; tracking any of them leaves the tree
+  perpetually dirty and blocks every rebase.
+- `.gitignore` has NO effect on an already-tracked file. If any of the above were
+  committed before being ignored, untrack them once (`git rm --cached <files>`;
+  the files stay on disk) and commit — otherwise the churn persists.
 - Tell the user what you created so they can review it.
 - Do NOT overwrite files that already exist.
 - **Project-level hooks**: If no `.claude/settings.json` or `.claude/settings.local.json` exists with hooks, remind the user that build/typecheck and lint will not run automatically. See the Hooks section below for what project-level hooks should be configured.

@@ -84,7 +84,15 @@ Never stack failed attempts on top of each other. Each retry should start from a
 
 ## Post-Code Verification
 
-After finishing ANY task or feature, verify the work before considering it done:
+After finishing ANY task or feature, verify the work before considering it done.
+
+**Scope the verification to what actually changed — same rigor, no wasted repetition.** The gate below is mandatory, but re-running checks that *cannot* have changed adds cost and zero information (this redundant re-running was by far the largest measured time sink). Apply the gate proportionately:
+- **Match effort to blast radius.** A localized change → run the affected tests + a typecheck of the affected package/area. Reserve the FULL suite + full build for genuine *integration points*: right before landing to main, or when the change is broad/cross-cutting (shared types, a widely-imported module, a schema/contract/migration). Do NOT run the full suite after every intermediate step.
+- **Don't re-prove unchanged code.** After a rebase or merge that did not touch your files (zero path overlap), the already-green result still holds — re-check only the integration surface; don't re-run the whole suite from scratch.
+- **Remember last-green.** Don't re-run an identical build/suite you just ran with no intervening change (the back-to-back reruns that dominated the audit). Nothing changed since the last green run → it's still green.
+- This **scales** the gate; it does not lower it. Every mandatory check below still runs — once, at the point where its result can actually differ. When genuinely unsure whether a change is "localized," run the fuller check.
+
+Then verify:
 
 ### 1. Functional Verification
 - If UI: describe what to check visually or run the dev server to confirm it renders correctly
@@ -140,6 +148,10 @@ See the canonical completion-summary format in `multi-agent-coordination.md` →
 ### 8. Lint & Format
 - Run linting to catch code quality issues
 - Ensure no new warnings or errors are introduced
+
+> **Running heavy checks (build / typecheck / test suite):**
+> - **Never run two heavy builds or test suites concurrently** — in this session, or knowingly alongside another agent building on the same machine. They contend for CPU/IO, run far slower, and time out → get redone (a confirmed source of wasted wall-clock). Let one finish before starting the next. The parallelization concurrency cap (`headroom.py`) already sizes agent fan-out to current machine load for exactly this reason.
+> - **Give a long build/test an explicit generous timeout** (or run it in the background) rather than the default 120s Bash timeout, which forces a long job into repeated poll-loops. A check that gets *killed* for taking too long is NOT a passing check — re-run it with enough time; never treat a timeout as a pass.
 
 > **Note:** If your tool has hooks configured (e.g., Claude Code):
 > - Steps 7-8 (build/lint) are handled automatically by Stop hooks.

@@ -1,0 +1,5 @@
+{
+  "maxConcurrentAgents": 4,
+  "headroomMode": "live",
+  "enabled": true
+}

@@ -88,6 +88,7 @@ Then: edit in the scratch worktree → build/verify → commit → push to `main
   git -C <worktree-path> push -u origin <feature-branch>
   ```
   This creates a remote backup immediately. If `.git` gets corrupted during cleanup or by another agent, all committed work survives on the remote. Feature branch pushes do NOT require user approval. **Unpushed local branches are unrecoverable if `.git` is destroyed — this has happened.**
+- **Commit author identity is automatic — do not override it.** In Claude Code, a hook rewrites every `git commit` to tag it with a per-agent-session author (`Developer (Claude agent-<id>)`) plus an `Agent-Session:` trailer, so concurrent agents' (and sub-agents') work stays distinguishable in `git log`/`git shortlog` even after a rebase+FF landing. Never pass your own `-c user.name`/`-c user.email` on a commit — it can conflict with the hook's injection. The SAME id is also what you pass to `workboard.py register --agent-session` (get it via `py ~/.ai-instructions/tools/whoami_agent.py`) so the live board and the finished git history agree on one identity. See `hooks-reference.md`.
 
 ## Merge back (two-level hierarchy)
 
@@ -99,7 +100,7 @@ There are two distinct merge levels. Do NOT confuse them:
   1. `git fetch . <sub-agent-branch>` (fetch the sub-agent's branch into the worktree)
   2. `git merge <sub-agent-branch> --no-ff`
   3. If there are conflicts between sub-agents, the main agent resolves them (or asks the user).
-  4. Run build/typecheck after each sub-agent merge.
+  4. After each sub-agent merge, typecheck the integration surface (that agent's files + their importers) — not the whole project every time. The FULL build/typecheck runs once after all sub-agents are merged (verification-scoping rule in `code-quality.md`).
 - After merging, clean up: `py ~/.ai-instructions/tools/worktree_cleanup.py <sub-agent-worktree-path>`.
 
 **Level 2: Main agent's feature branch → `main`/`dev` (REQUIRES USER PERMISSION)**
@@ -110,7 +111,7 @@ There are two distinct merge levels. Do NOT confuse them:
   1. **Pull the base branch into your worktree**: `git fetch origin <base-branch>`
   2. **Merge the base branch into your feature branch**: `git merge origin/<base-branch>` (inside your worktree)
   3. If there are conflicts, resolve them here in the worktree — this is your code, you understand the intent. For contradictory conflicts, **stop and ask the user**.
-  4. **Run a full build/typecheck** in the worktree to verify everything works with the latest base branch changes incorporated.
+  4. **Run a full build/typecheck** in the worktree to verify everything works with the latest base branch changes incorporated. (Full verification is the gate at this landing point. Exception: if the base you just merged had **zero path-overlap** with your changes, the merge cannot have altered your build's inputs — re-check the integration surface rather than paying for a full cold rebuild of unrelated code.)
   5. **Update the base branch ref with `update-ref`**: From inside the worktree, run:
      ```bash
      git update-ref refs/heads/<base-branch> HEAD

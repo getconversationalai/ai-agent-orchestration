@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Second gate for the PUBLIC repo: scan everything about to leave this machine.
+#
+# pre-commit checks what you stage. This checks the whole tree being pushed,
+# which catches content that arrived some other way — a merge, a cherry-pick, a
+# file written before the hook existed, or a commit made with --no-verify.
+#
+# Bypass (only if you are certain): git push --no-verify
+
+set -uo pipefail
+remote_url="${2:-}"
+say() { echo "  $*" >&2; }
+
+# Refuse to push this repo anywhere except its own public remote. Prevents the
+# public tree ever landing in the private repo (or anywhere else) by accident.
+if [ -n "$remote_url" ] && ! echo "$remote_url" | grep -qi "ai-agent-orchestration\(\.git\)\?$"; then
+  say ""
+  say "BLOCKED: this is the PUBLIC repo; refusing to push to an unexpected remote:"
+  say "    $remote_url"
+  say "Expected the public repo's own URL."
+  exit 1
+fi
+
+fail=0
+
+# 1. Private-by-convention or excluded files anywhere in the tracked tree.
+bad=$(git ls-files | grep -E '\.local\.[a-z]+$|^(codex/config\.toml|gemini/settings\.json)$' || true)
+if [ -n "$bad" ]; then
+  say ""
+  say "BLOCKED: private/machine-specific file(s) are tracked in this repo:"
+  echo "$bad" | while read -r f; do say "    $f"; done
+  fail=1
+fi
+
+# 2. Identifying strings anywhere in tracked text content.
+needles_file="$HOME/.agent-orchestration/public-repo-needles.txt"
+if [ -f "$needles_file" ]; then
+  while read -r needle; do
+    [ -z "$needle" ] && continue
+    case "$needle" in \#*) continue;; esac
+    hits=$(git grep -l -iF -- "$needle" 2>/dev/null || true)
+    if [ -n "$hits" ]; then
+      say ""
+      say "BLOCKED: tracked content mentions '$needle':"
+      echo "$hits" | head -10 | while read -r f; do say "    $f"; done
+      fail=1
+    fi
+  done < "$needles_file"
+else
+  say "NOTE: $needles_file missing - only structural checks ran, no content scan."
+fi
+
+if [ "$fail" -ne 0 ]; then
+  say ""
+  say "Nothing was pushed. Once public history contains something, deleting it"
+  say "later does NOT remove it — anyone can recover it from an old commit."
+  say ""
+  exit 1
+fi
+exit 0

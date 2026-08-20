@@ -53,7 +53,7 @@
     ],
     "defaultMode": "bypassPermissions"
   },
-  "model": "claude-opus-4-8",
+  "model": "claude-opus-4-8[1m]",
   "availableModels": [
     "claude-opus-4-8[1m]",
     "claude-opus-4-8",
@@ -96,6 +96,10 @@
           {
             "type": "command",
             "command": "py ~/.claude/hooks/pretooluse_main_worktree_guard.py"
+          },
+          {
+            "type": "command",
+            "command": "py ~/.claude/hooks/autocapture.py register"
           }
         ]
       },
@@ -109,6 +113,23 @@
           {
             "type": "command",
             "command": "py ~/.claude/hooks/pretooluse_main_worktree_guard.py"
+          },
+          {
+            "type": "command",
+            "command": "py ~/.claude/hooks/autocapture.py register"
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py ~/.claude/hooks/autocapture.py debug-subagent"
+          },
+          {
+            "type": "command",
+            "command": "py ~/.claude/hooks/pretooluse_task_guard.py"
           }
         ]
       }
@@ -129,6 +150,19 @@
           {
             "type": "command",
             "command": "py ~/.claude/hooks/posttooluse_bash.py"
+          },
+          {
+            "type": "command",
+            "command": "py ~/.claude/hooks/autocapture.py commit"
+          }
+        ]
+      },
+      {
+        "matcher": "TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py ~/.claude/hooks/autocapture.py todo"
           }
         ]
       }
@@ -199,6 +233,10 @@
           {
             "type": "command",
             "command": "bash -c 'if [ -f \"WORKBOARD.md\" ]; then echo \"Reminder: Update WORKBOARD.md â€” move completed subagent work to Completed section.\"; fi'"
+          },
+          {
+            "type": "command",
+            "command": "py ~/.claude/hooks/autocapture.py subagent-complete"
           }
         ]
       }
@@ -220,19 +258,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'BRANCH=$(git branch --show-current 2>/dev/null); if [ \"$BRANCH\" = \"main\" ] || [ \"$BRANCH\" = \"master\" ]; then CHANGES=$(git diff --name-only -- \"*.ts\" \"*.tsx\" \"*.js\" \"*.jsx\" \"*.py\" \"*.css\" \"*.json\" 2>/dev/null | head -1); if [ -n \"$CHANGES\" ]; then echo \"âš ï¸ You have uncommitted code changes on $BRANCH. Create a feature branch.\"; fi; fi'"
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'if git rev-parse --show-toplevel >/dev/null 2>&1; then CHANGED=$(git diff --name-only -- \"*.ts\" \"*.tsx\" \"*.js\" \"*.jsx\" \"*.py\" \"*.go\" \"*.rs\" 2>/dev/null | head -1); if [ -n \"$CHANGED\" ] && [ ! -f \"WORKBOARD.md\" ]; then echo \"âš ï¸ Code changes detected but no WORKBOARD.md. Create one to coordinate with other agents.\"; fi; fi'"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/stop_debug_scan.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null); if [ -n \"$GIT_ROOT\" ] && [ ! -d \"$GIT_ROOT/.git\" ]; then echo \"ðŸš¨ CRITICAL: .git directory has been DESTROYED at $GIT_ROOT/.git! STOP ALL WORK IMMEDIATELY. Recovery: git init && git remote add origin <url> && git fetch origin && git checkout -B main origin/main\"; fi'"
+            "command": "bash ~/.claude/hooks/stop_repo_checks.sh"
           },
           {
             "type": "command",
@@ -287,8 +313,10 @@
       }
     }
   },
-  "effortLevel": "xhigh",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
-  "agentPushNotifEnabled": true
+  "switchModelsOnFlag": true,
+  "agentPushNotifEnabled": true,
+  "inputNeededNotifEnabled": true,
+  "effortLevel": "xhigh"
 }

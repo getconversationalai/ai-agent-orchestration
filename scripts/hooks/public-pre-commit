@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Guard for the PUBLIC repo. Refuses to record anything that belongs on the
+# private side. This is the last line before content becomes permanent in a
+# public history, where deleting it later does NOT remove it.
+#
+# Bypass (only if you are certain): git commit --no-verify
+
+set -uo pipefail
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+fail=0
+say() { echo "  $*" >&2; }
+
+# 1. Anything using the *.local.* convention is private BY DEFINITION.
+locals=$(echo "$staged" | grep -E '\.local\.[a-z]+$' || true)
+if [ -n "$locals" ]; then
+  say ""
+  say "BLOCKED: '*.local.*' files are private by convention and must never be public:"
+  echo "$locals" | while read -r f; do say "    $f"; done
+  fail=1
+fi
+
+# 2. Files the public export deliberately excludes. If one appears here, it was
+#    copied in by hand rather than produced by export-public.ps1.
+excluded=$(echo "$staged" | grep -E '^(codex/config\.toml|gemini/settings\.json)$' || true)
+if [ -n "$excluded" ]; then
+  say ""
+  say "BLOCKED: these are machine-specific and excluded from the public copy:"
+  echo "$excluded" | while read -r f; do say "    $f"; done
+  fail=1
+fi
+
+# 3. Credential-shaped files. Never a false positive worth allowing.
+creds=$(echo "$staged" | grep -EI '(^|/)(\.env|\.env\..*|notify\.env|sa-key\.json|\.npmrc|\.netrc|id_rsa)$|\.(pem|p12|pfx|key)$' || true)
+if [ -n "$creds" ]; then
+  say ""
+  say "BLOCKED: credential-shaped file(s) staged:"
+  echo "$creds" | while read -r f; do say "    $f"; done
+  fail=1
+fi
+
+# 4. Identifying strings in the CONTENT of staged text files. The terms live in
+#    the private repo (export-needles.local.txt) so this list is not itself a
+#    disclosure; if it is missing we scan for the username only.
+needles_file="$HOME/.agent-orchestration/public-repo-needles.txt"
+needles=$(whoami 2>/dev/null || echo "")
+if [ -f "$needles_file" ]; then
+  needles="$needles"$'\n'"$(grep -vE '^\s*(#|$)' "$needles_file")"
+fi
+if [ -n "${needles// /}" ]; then
+  while read -r needle; do
+    [ -z "$needle" ] && continue
+    hits=$(echo "$staged" | while read -r f; do
+             [ -f "$f" ] || continue
+             if grep -qiF -- "$needle" "$f" 2>/dev/null; then echo "$f"; fi
+           done)
+    if [ -n "$hits" ]; then
+      say ""
+      say "BLOCKED: staged content mentions '$needle':"
+      echo "$hits" | while read -r f; do say "    $f"; done
+      fail=1
+    fi
+  done <<< "$needles"
+fi
+
+if [ "$fail" -ne 0 ]; then
+  say ""
+  say "Nothing was committed. This repo is PUBLIC — content added here is"
+  say "permanent in its history even if deleted later."
+  say "The normal way to update it is to re-run export-public.ps1 from the"
+  say "private repo, which excludes all of the above automatically."
+  say ""
+  exit 1
+fi
+exit 0

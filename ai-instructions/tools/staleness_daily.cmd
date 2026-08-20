@@ -17,4 +17,8 @@ if not exist "%RUNTIME%" mkdir "%RUNTIME%"
 echo. >> "%LOG%"
 echo ===== %DATE% %TIME% ===== >> "%LOG%"
 py "%TOOLS%\worktree_sweeper.py" --apply --autosave >> "%LOG%" 2>&1
+REM Reconcile each repo's board from git (register in-flight branches, complete merged/gone,
+REM refresh timestamps) before the staleness report reads it. Inert until armed
+REM (~/.stale-work/reconcile-initialized); --apply only previews until then.
+py "%TOOLS%\workboard_reconcile.py" --apply >> "%LOG%" 2>&1
 py "%TOOLS%\workboard_staleness_check.py" --email --days 7 --no-cache >> "%LOG%" 2>&1

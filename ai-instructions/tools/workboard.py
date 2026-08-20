@@ -32,6 +32,21 @@ except Exception:
     pass
 
 # ---------------------------------------------------------------------------
+# Agent-state event emission (opt-in telemetry, OFF by default).
+# ---------------------------------------------------------------------------
+# This is imported DEFENSIVELY: if the agent_state package is missing or fails
+# to import for ANY reason, we fall back to a no-op emit_safely so this shared,
+# every-agent-depends-on-it script keeps behaving EXACTLY as before. Emission is
+# further gated at call time by the AGENT_STATE_EMIT kill switch (default off)
+# inside emit_safely, which itself never raises. Net effect: with the switch
+# unset/"0" (the default), nothing below changes any file byte or any output.
+try:
+    from agent_state.emit import emit_safely
+except Exception:
+    def emit_safely(kind, payload):  # noqa: D401 - inert fallback
+        return None
+
+# ---------------------------------------------------------------------------
 # Cross-platform file locking
 # ---------------------------------------------------------------------------
 if sys.platform == "win32":
@@ -212,6 +227,11 @@ def migrate_legacy_markdown():
             data[key].append(entry)
 
     write_workboard(data)
+    # Return the materialised data so callers can emit a one-time snapshot
+    # event for this first-ever JSON write (covers the cmd_show /
+    # cmd_refresh_markdown paths that write outside `transaction`). The
+    # early-return paths above return None — no materialisation happened.
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +256,10 @@ def find_agent(wb: dict, feature_or_id: str, section: str = "active") -> tuple |
     target = feature_or_id.lower()
     lst = wb.get(section, [])
     for i, e in enumerate(lst):
-        if e.get("id", "").lower() == target or e.get("feature", "").lower() == target:
+        # Match by id, feature, OR agent-session key (the last is all a completion
+        # hook can derive at SubagentStop, and enables identity-keyed nesting).
+        if (e.get("id", "").lower() == target or e.get("feature", "").lower() == target
+                or e.get("agent_session", "").lower() == target):
             return lst, i, e
     return None
 
@@ -245,7 +268,8 @@ def find_subagent(parent: dict, sub_id_or_name: str) -> tuple | None:
     target = sub_id_or_name.lower()
     subs = parent.get("subagents", [])
     for i, s in enumerate(subs):
-        if s.get("id", "").lower() == target or s.get("feature", "").lower() == target:
+        if (s.get("id", "").lower() == target or s.get("feature", "").lower() == target
+                or s.get("agent_session", "").lower() == target):
             return subs, i, s
     return None
 
@@ -355,6 +379,8 @@ def render_workboard_md(wb: dict) -> str:
         started = e.get("started", "?")
         lines.append(f"- **{e.get('feature','?')}** ({e.get('id','?')}) — {e.get('tool','?')} — "
                      f"Started {started}. Status: {status}.")
+        if e.get("agent_session"):
+            lines.append(f"  Agent-Session: {e['agent_session']}")
         if e.get("plan_path"):
             lines.append(f"  Plan: {e['plan_path']}")
         if e.get("current_path"):
@@ -378,6 +404,8 @@ def render_workboard_md(wb: dict) -> str:
             lines.append(sub_line)
             if sub.get("branch"):
                 lines.append(f"    Branch: {sub['branch']}. Worktree: {sub.get('worktree','?')}.")
+            if sub.get("agent_session"):
+                lines.append(f"    Agent-Session: {sub['agent_session']}")
         lines.append("")
 
     lines.append("## Completed")
@@ -435,6 +463,28 @@ def write_mirrors(wb: dict, prog: dict):
 
 
 # ---------------------------------------------------------------------------
+# Agent-state event stashing (see the emit_safely import near the top).
+# ---------------------------------------------------------------------------
+# A handler stashes ITS event payload — including the entity id it just
+# resolved — on `args`; `main()` emits it AFTER the lock is released, mirroring
+# the existing `args._auto_cleanup_worktree` post-transaction slot. Emission is
+# NEVER done inside the locked region. All of this is inert when the kill switch
+# is off (emit_safely no-ops), so it cannot change any file byte or any output.
+def _stash_event(args, kind, payload):
+    """Record (kind, payload) for main() to emit once the lock is released."""
+    args._agent_state_event = (kind, payload)
+
+
+def _migrate_and_stash(args):
+    """Run the one-time legacy migration; if it MATERIALISED entries (its
+    first-ever JSON write), stash a snapshot so main() can emit it post-lock.
+    Behaviourally identical to a bare migrate call when nothing materialises."""
+    materialised = migrate_legacy_markdown()
+    if materialised is not None:
+        args._agent_state_snapshot = materialised
+
+
+# ---------------------------------------------------------------------------
 # Generic transaction wrapper
 # ---------------------------------------------------------------------------
 def transaction(fn):
@@ -442,7 +492,7 @@ def transaction(fn):
     def wrapper(args):
         lf = acquire_lock()
         try:
-            migrate_legacy_markdown()
+            _migrate_and_stash(args)
             wb = read_workboard()
             prog = read_progress()
             result = fn(args, wb, prog)
@@ -476,10 +526,97 @@ def cmd_register(args, wb, prog):
         "files": [f.strip() for f in (args.files or "").split(",") if f.strip()],
         "current_path": "",
         "overlap": args.overlap or "",
+        "agent_session": args.agent_session or "",
         "subagents": [],
     }
     wb.setdefault("active", []).append(entry)
+    _stash_event(args, "register", dict(entry))
     print(f"Registered '{entry['feature']}' (id: {entry['id']}).")
+
+
+# ---------------------------------------------------------------------------
+# Auto-capture verbs (hook-driven): idempotent + best-effort (never block work)
+# ---------------------------------------------------------------------------
+def _find_by_branch(wb, branch, agent_session):
+    """First active entry matching this branch (and agent_session, if given)."""
+    for e in wb.get("active", []):
+        if e.get("branch") == branch and (not agent_session or e.get("agent_session") == agent_session):
+            return e
+    return None
+
+
+def transaction_besteffort(fn):
+    """Like transaction(), but a SHORT lock timeout; on contention, exit 0 and
+    drop the write so a hook-driven call can NEVER block or fail an agent's work.
+    The reconciler backstops anything dropped here."""
+    def wrapper(args):
+        try:
+            lf = acquire_lock(timeout=0.75)
+        except BaseException:
+            sys.exit(0)  # lock busy (acquire_lock exits/raises) -> drop, don't block
+        try:
+            _migrate_and_stash(args)
+            wb = read_workboard()
+            prog = read_progress()
+            result = fn(args, wb, prog)
+            write_workboard(wb)
+            write_progress(prog)
+            write_mirrors(wb, prog)
+            return result
+        finally:
+            release_lock(lf)
+    return wrapper
+
+
+@transaction_besteffort
+def cmd_ensure_registered(args, wb, prog):
+    """Idempotent register-or-no-op keyed on (branch, agent_session). Safe to call
+    on every edit: registers the claim once, otherwise just heartbeats it."""
+    existing = _find_by_branch(wb, args.branch, args.agent_session)
+    if existing:
+        existing["last_active"] = now_iso()
+        _stash_event(args, "touch", dict(existing))
+        return
+    feature = args.feature or args.branch.split("/", 1)[-1].replace("-", " ")
+    entry = {
+        "id": slugify(f"{feature}-{args.agent_session}"),
+        "feature": feature,
+        "tool": "auto",
+        "status": "active",
+        "started": now_iso(),
+        "updated": now_iso(),
+        "last_active": now_iso(),
+        "plan_path": args.plan or "",
+        "branch": args.branch,
+        "worktree": args.worktree,
+        "files": [f.strip() for f in (args.files or "").split(",") if f.strip()],
+        "current_path": "",
+        "overlap": "",
+        "agent_session": args.agent_session or "",
+        "subagents": [],
+    }
+    wb.setdefault("active", []).append(entry)
+    _stash_event(args, "register", dict(entry))
+
+
+@transaction_besteffort
+def cmd_touch(args, wb, prog):
+    """Heartbeat: bump last_active on the (branch, agent_session) entry, if present."""
+    e = _find_by_branch(wb, args.branch, args.agent_session)
+    if e:
+        e["last_active"] = now_iso()
+        _stash_event(args, "touch", dict(e))
+
+
+@transaction_besteffort
+def cmd_update_progress(args, wb, prog):
+    """Best-effort progress mirror: set current_path + heartbeat on the
+    (branch, agent_session) entry, if present (used by the todo-mirror hook)."""
+    e = _find_by_branch(wb, args.branch, args.agent_session)
+    if e:
+        e["current_path"] = args.path
+        e["last_active"] = now_iso()
+        _stash_event(args, "update-path", dict(e))
 
 
 @transaction
@@ -495,6 +632,7 @@ def cmd_update_status(args, wb, prog):
         entry["waiting_reason"] = args.reason
     elif args.status == "active":
         entry.pop("waiting_reason", None)
+    _stash_event(args, "update-status", dict(entry))
     print(f"Updated '{entry['feature']}' status to '{args.status}'.")
 
 
@@ -507,6 +645,7 @@ def cmd_update_files(args, wb, prog):
     _, _, entry = found
     entry["files"] = [f.strip() for f in args.files.split(",") if f.strip()]
     entry["updated"] = now_iso()
+    _stash_event(args, "update-files", dict(entry))
     print(f"Updated '{entry['feature']}' file list ({len(entry['files'])} files).")
 
 
@@ -519,6 +658,7 @@ def cmd_set_overlap(args, wb, prog):
     _, _, entry = found
     entry["overlap"] = args.overlap
     entry["updated"] = now_iso()
+    _stash_event(args, "set-overlap", dict(entry))
     print(f"Updated overlap info for '{entry['feature']}'.")
 
 
@@ -532,6 +672,7 @@ def cmd_update_path(args, wb, prog):
     _, _, entry = found
     entry["current_path"] = args.path
     entry["updated"] = now_iso()
+    _stash_event(args, "update-path", dict(entry))
     print(f"'{entry['feature']}' current_path -> {args.path or '(cleared)'}.")
 
 
@@ -555,6 +696,7 @@ def cmd_complete(args, wb, prog):
         prog[entry["id"]]["status"] = "done"
         # mark all nodes done recursively
         _mark_tree_done(prog[entry["id"]])
+    _stash_event(args, "complete", dict(entry))
     print(f"Moved '{entry['feature']}' to Completed.")
     # Stash the worktree path so main() can invoke cleanup AFTER the transaction
     # releases the WORKBOARD lock. Auto-cleanup is opt-out via --no-auto-cleanup.
@@ -593,6 +735,7 @@ def cmd_register_subagent(args, wb, prog):
         "branch": args.branch or "",
         "worktree": args.worktree or "",
         "files": [f.strip() for f in (args.files or "").split(",") if f.strip()],
+        "agent_session": args.agent_session or "",
     }
     pentry.setdefault("subagents", []).append(sub)
     pentry["updated"] = now_iso()
@@ -604,6 +747,7 @@ def cmd_register_subagent(args, wb, prog):
             node["status"] = "active"
             node["agent"] = sub_id
             mark_ancestors_active(prog[pentry["id"]], parts)
+    _stash_event(args, "register-subagent", {**sub, "parent_id": pentry["id"]})
     print(f"Registered sub-agent '{sub['feature']}' (id: {sub_id}) under parent '{pentry['feature']}'.")
 
 
@@ -628,6 +772,7 @@ def cmd_complete_subagent(args, wb, prog):
             propagate_status(prog[pentry["id"]])
     subs.pop(idx)
     pentry["updated"] = now_iso()
+    _stash_event(args, "complete-subagent", {**sub, "parent_id": pentry["id"]})
     print(f"Completed sub-agent '{sub['feature']}' under '{pentry['feature']}'.")
 
 
@@ -646,6 +791,7 @@ def cmd_update_subagent_path(args, wb, prog):
     sub["current_path"] = args.path
     sub["updated"] = now_iso()
     pentry["updated"] = now_iso()
+    _stash_event(args, "update-subagent-path", {**sub, "parent_id": pentry["id"]})
     print(f"Sub-agent '{sub['feature']}' current_path -> {args.path or '(cleared)'}.")
 
 
@@ -674,6 +820,14 @@ def cmd_register_plan(args, wb, prog):
             entry["plan_path"] = args.plan_path
         entry["id"] = plan_id
         entry["updated"] = now_iso()
+    _stash_event(args, "register-plan", {
+        "id": plan_id,
+        "title": prog[plan_id]["title"],
+        "level": "plan",
+        "status": prog[plan_id]["status"],
+        "plan_path": prog[plan_id]["plan_path"],
+        "created": prog[plan_id]["created"],
+    })
     print(f"Registered plan '{prog[plan_id]['title']}' (id: {plan_id}).")
 
 
@@ -704,13 +858,16 @@ def _add_child(prog, feature_id, parent_path, title, level):
 
 @transaction
 def cmd_add_phase(args, wb, prog):
-    _add_child(prog, _resolve_plan_id(wb, prog, args.feature), None, args.title, "phase")
+    pid = _resolve_plan_id(wb, prog, args.feature)
+    _add_child(prog, pid, None, args.title, "phase")
+    _stash_event(args, "add-phase", {"id": pid, "title": args.title, "level": "phase", "parent_path": ""})
 
 
 @transaction
 def cmd_add_wave(args, wb, prog):
     pid = _resolve_plan_id(wb, prog, args.feature)
     _add_child(prog, pid, args.phase, args.title, "wave")
+    _stash_event(args, "add-wave", {"id": pid, "title": args.title, "level": "wave", "parent_path": args.phase or ""})
 
 
 @transaction
@@ -718,6 +875,7 @@ def cmd_add_task(args, wb, prog):
     pid = _resolve_plan_id(wb, prog, args.feature)
     parent_path = " / ".join(p for p in [args.phase, args.wave] if p)
     _add_child(prog, pid, parent_path, args.title, "task")
+    _stash_event(args, "add-task", {"id": pid, "title": args.title, "level": "task", "parent_path": parent_path})
 
 
 @transaction
@@ -725,6 +883,7 @@ def cmd_add_node(args, wb, prog):
     """Generic add — create a node at any path with a given level."""
     pid = _resolve_plan_id(wb, prog, args.feature)
     _add_child(prog, pid, args.parent, args.title, args.level or "node")
+    _stash_event(args, "add-node", {"id": pid, "title": args.title, "level": args.level or "node", "parent_path": args.parent or ""})
 
 
 @transaction
@@ -747,6 +906,7 @@ def cmd_start(args, wb, prog):
         _, _, entry = found
         entry["current_path"] = args.at or ""
         entry["updated"] = now_iso()
+    _stash_event(args, "start", {"id": pid, "at": args.at or "", "status": "active"})
     print(f"Started {'/'.join(parts) if parts else pid}.")
 
 
@@ -771,6 +931,7 @@ def cmd_done(args, wb, prog):
         if entry.get("current_path") == args.at:
             entry["current_path"] = ""
         entry["updated"] = now_iso()
+    _stash_event(args, "done", {"id": pid, "at": args.at or "", "status": "done"})
     print(f"Done: {'/'.join(parts) if parts else pid}.")
 
 
@@ -798,7 +959,7 @@ def _resolve_plan_id(wb, prog, feature_or_id: str) -> str:
 # Show / refresh
 # ---------------------------------------------------------------------------
 def cmd_show(args):
-    migrate_legacy_markdown()
+    _migrate_and_stash(args)
     wb = read_workboard()
     prog = read_progress()
     if args.feature:
@@ -818,7 +979,7 @@ def cmd_show(args):
 def cmd_refresh_markdown(args):
     lf = acquire_lock()
     try:
-        migrate_legacy_markdown()
+        _migrate_and_stash(args)
         wb = read_workboard()
         prog = read_progress()
         write_mirrors(wb, prog)
@@ -844,7 +1005,28 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--worktree", required=True)
     r.add_argument("--overlap", default="")
     r.add_argument("--id", default="", help="Optional custom id (default: slugified feature)")
+    r.add_argument("--agent-session", default="", help="Per-agent-session id (e.g. agent-a1b2c3) for live who's-working-on-what visibility, distinct from --tool")
     r.set_defaults(func=cmd_register)
+
+    er = sub.add_parser("ensure-registered", help="Idempotent register-or-no-op keyed on (branch, agent-session); safe to call on every edit")
+    er.add_argument("--branch", required=True)
+    er.add_argument("--worktree", required=True)
+    er.add_argument("--agent-session", required=True)
+    er.add_argument("--feature", default="")
+    er.add_argument("--plan", default="")
+    er.add_argument("--files", default="")
+    er.set_defaults(func=cmd_ensure_registered)
+
+    tp = sub.add_parser("touch", help="Heartbeat: bump last_active on a branch's entry")
+    tp.add_argument("--branch", required=True)
+    tp.add_argument("--agent-session", default="")
+    tp.set_defaults(func=cmd_touch)
+
+    upg = sub.add_parser("update-progress", help="Best-effort: set current_path + heartbeat on a (branch, agent-session) entry")
+    upg.add_argument("--branch", required=True)
+    upg.add_argument("--agent-session", default="")
+    upg.add_argument("--path", default="")
+    upg.set_defaults(func=cmd_update_progress)
 
     us = sub.add_parser("update-status", help="Change status: active / waiting / blocked")
     us.add_argument("--feature", required=True)
@@ -884,6 +1066,7 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--branch", default="")
     rs.add_argument("--worktree", default="")
     rs.add_argument("--files", default="")
+    rs.add_argument("--agent-session", default="", help="Per-agent-session id for this sub-agent (e.g. agent-a1b2c3.sub7f2)")
     rs.set_defaults(func=cmd_register_subagent)
 
     cs = sub.add_parser("complete-subagent", help="Mark a sub-agent finished (parent reports)")
@@ -950,10 +1133,30 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _emit_stashed_events(args):
+    """Emit any event(s) a handler stashed on `args`, now that the lock is
+    released. Each call goes through emit_safely (never raises; a no-op when the
+    AGENT_STATE_EMIT kill switch is off), so this can never change the command's
+    outcome or its files. A first-ever migration snapshot, if one was stashed,
+    is emitted before the command's own event."""
+    snapshot = getattr(args, "_agent_state_snapshot", None)
+    if snapshot is not None:
+        emit_safely("snapshot", snapshot)
+    event = getattr(args, "_agent_state_event", None)
+    if event is not None:
+        kind, payload = event
+        emit_safely(kind, payload)
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
     args.func(args)
+    # Post-transaction actions run AFTER the WORKBOARD lock has been released
+    # (args.func has returned). Flush any stashed agent-state event FIRST — this
+    # is the post-lock slot the emitter is wired into, deliberately never inside
+    # the transaction's locked region — then run the worktree auto-cleanup.
+    _emit_stashed_events(args)
     # Post-transaction actions: if `complete` flagged a worktree for auto-cleanup,
     # invoke the cleanup script now that the WORKBOARD lock has been released.
     # Doing this *outside* the transaction means a long-running cleanup doesn't

@@ -24,3 +24,5 @@
 *.pre-router.bak
 *.bak
 export-needles.local.txt
+export-scrub.local.txt
+.superpowers/

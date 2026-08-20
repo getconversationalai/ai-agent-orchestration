@@ -1,7 +1,7 @@
 ---
 name: multi-agent-coordination
-description: Coordinate parallel agents via WORKBOARD; dependency analysis; progress tracking; subagents (when to fan out vs run inline; tiering test/review rigor by risk); merge ordering; migration naming; plan/phase/stage/wave completion summary
-when_to_read: before launching parallel agents, registering work, tracking progress, merging multiple agents, finishing a phase/plan, or deciding whether to dispatch sub-agents and how much test/review rigor a task warrants
+description: Coordinate parallel agents via WORKBOARD once you have decided to fan out (the fan-out DECISION lives in parallel-agents.md); dependency analysis; progress tracking; subagent coordination/registration; tiering test/review rigor by risk; merge ordering; migration naming; plan/phase/stage/wave completion summary
+when_to_read: after deciding to parallelize (via parallel-agents.md) — for launching parallel agents, registering work, tracking progress, merging multiple agents, finishing a phase/plan, or deciding how much test/review rigor a task warrants
 sections:
   - Before starting any work
   - Dependency analysis
@@ -38,8 +38,10 @@ Multiple agents (Claude, Gemini, Codex, or multiple instances of the same tool) 
 5. **Register your work** using the workboard script:
    ```bash
    py ~/.ai-instructions/tools/workboard.py register --feature "<name>" --tool <tool> \
-       --plan <plan-path> --files "<file1,file2>" --branch <branch> --worktree <worktree-path>
+       --plan <plan-path> --files "<file1,file2>" --branch <branch> --worktree <worktree-path> \
+       --agent-session <agent-id>
    ```
+   `--agent-session` is optional but recommended in Claude Code — get your own id with `py ~/.ai-instructions/tools/whoami_agent.py` (prints e.g. `agent-5a9c3e`, the SAME id your commits get tagged with — see `hooks-reference.md`), so the board's live "who owns this" view uses the same identity as `git log --author=` does for finished work. Sub-agents get their PARENT's id (no env-var exposes a finer per-sub-agent id outside the commit-injection hook itself).
 
 ## Dependency analysis
 
@@ -77,7 +79,7 @@ If you genuinely can't determine whether the dependency is structural or just ad
   ```bash
   py ~/.ai-instructions/tools/workboard.py update-files --feature "<name>" --files "<updated,file,list>"
   ```
-- **If you need to modify a file not in your original plan**, do NOT just silently expand scope. Spawn a sub-agent to update your plan file with the new files and rationale, and update your WORKBOARD.md entry. This keeps your plan the source of truth for other agents reading it.
+- **If you need to modify a file not in your original plan**, do NOT just silently expand scope. Update your plan file inline with the new files and rationale, and update your WORKBOARD.md entry. (This is a bookkeeping edit, not independent substantial work — do it inline; never spin up a sub-agent for it.) This keeps your plan the source of truth for other agents reading it.
 - If a dependency on another agent emerges mid-work that wasn't apparent at the start, update your status and tell the user:
   ```bash
   py ~/.ai-instructions/tools/workboard.py update-status --feature "<name>" --status waiting \
@@ -139,7 +141,7 @@ Each agent merges from inside its own worktree (see Level 2 merge in Worktree Is
 - **After resolving each conflict**: verify that the intent of BOTH agents' changes is preserved. Read the resolved file and confirm it includes the functionality from both feature branches.
 
 ### Step 4: Post-Merge Verification
-After ALL agents are merged:
+After ALL agents are merged — this is the genuine integration point, so full verification belongs HERE (not repeated after every individual merge above):
 1. Run full build and typecheck.
 2. Run tests if available.
 3. **Audit check**: for each merged agent, verify its key changes are present in the final codebase. Spot-check at least the main files each agent modified to confirm nothing was silently dropped or reverted.
@@ -164,6 +166,7 @@ Timestamps are inherently collision-free across parallel agents (different agent
 
 ## Active Work
 - **[feature]** — [tool] — Started [time]. Status: active/waiting/blocked.
+  Agent-Session: [id, e.g. agent-a1b2c3 — the SAME id this agent's commits carry as author, per hooks-reference.md's per-agent git identity injection. Lets the board answer "which live agent owns this" the same way `git log --author=` answers "which agent already did this."]
   Plan: [path to plan file, e.g., plans/phase-3.md]
   Files: [file1, file2, ...] (ALL files you will modify, update as scope changes)
   Migrations: [migration numbers or timestamps claimed, e.g., 065, 066]
@@ -286,24 +289,11 @@ Add `WORKBOARD.json`, `PROGRESS.json`, `WORKBOARD.md`, and `PROGRESS.md` to `.gi
 
 ## Subagents
 
-### Why dispatch a sub-agent — fan-out, not ceremony
+### When to dispatch — see the decision model
 
-The primary reason to dispatch sub-agents is **fan-out: running independent work concurrently to cut wall-clock time.** Context isolation (on tasks big enough to blow a context window) and independent review (on risky logic) are secondary benefits, not the purpose.
+Whether to dispatch at all is decided by the three-gate test in `parallel-agents.md` (`## The parallelization decision`): independent + substantial + headroom → concurrent batch; otherwise inline. **Never dispatch subagents one-at-a-time in sequence** — that pays full overhead for zero parallelism; run inline instead. This section covers only what to do ONCE you have decided to fan out: coordination, registration, and merge. **All of that machinery applies ONLY to a real fan-out; inline work uses none of it.** For HOW to actually execute a batch vs. a chain (worktree-per-track, waves, two-level merge, per-wave review), follow `planning.md` → "Executing by structure".
 
-**Anti-pattern — the sequential sub-agent loop.** Dispatching one sub-agent per task in sequence (implement task 1 → review it → implement task 2 → review it → …) is worst-of-both: you pay full dispatch overhead *and* full review cost while getting **zero** parallelism. It is no faster than doing the work inline, and usually slower. If the tasks must run in order, **run them inline in the main session.**
-
-Decide with two independent dials — set them **per task, not per plan**:
-
-**Dial 1 — Parallelism, by _independence_:**
-| Situation | Do this |
-|---|---|
-| Several tasks that don't touch each other's outputs | **Fan out** — dispatch concurrently, one worktree per agent (they mutate files; without isolation they collide) |
-| Tasks that share a signature/schema/contract, or task N consumes task N-1's output | **Inline, sequential** — no sub-agent |
-| A single task large enough to flood the context window | **Sub-agent even if solo** — isolation is the win here, not speed |
-
-Split the plan into independent *tracks* first; parallelism is only available if the plan is structured for it. A plan whose tasks form one dependency chain does not parallelize — don't fake it with sub-agents.
-
-**Dial 2 — Rigor, by _risk_:**
+### Rigor, by risk (independent of the parallelization decision)
 | Tier | Examples | Tests | Review |
 |---|---|---|---|
 | **Mechanical** | scaffold, config loader, wiring, plain CRUD | one happy-path test; skip the strict RED ritual | inline self-check; no separate reviewer |
@@ -358,6 +348,8 @@ A dispatched sub-agent's own report — including the `subagent-driven-developme
 ## Summary on plan / phase / stage / wave completion
 
 The moment you finish a **plan**, **phase**, **stage**, or **wave**, you MUST include a plain-English summary in your reply to the user. This is your main signal that real progress happened — don't skip it, and don't skip waves. The format is tiered (see **Trigger granularity** below): plan / phase / stage get the full five sections; a wave gets a lighter recap.
+
+**Also scale the summary's DEPTH to the change size** (ceremony tiers, `planning.md` → "Ceremony by change size"). This is a second axis on top of the granularity above: a Large/substantial phase gets the full five sections; a Small/localized phase gets a *terse* five-section (a line or two per heading); and a standalone **Trivial or Small change that isn't a formal plan/phase at all** gets just a **1-2 line plain-English recap**, not the five-section format. Never inflate a one-line fix into a five-section report — but never drop the section headings for genuine plan/phase/stage work either.
 
 **The completion summary is FIVE labeled sections, in THIS order, with THESE exact headings** — do not rename, reorder, or merge them:
 
@@ -462,7 +454,7 @@ Sub-agents merge into the **main agent's feature branch**, not into `main`/`dev`
 - **Then merge single-modifier files** — Copy that agent's version directly.
 - **Then handle multi-modifier files manually** — Read each agent's version and merge additions.
 - **The main agent performs all sub-agent merges inside its own worktree.**
-- **Always run a full typecheck after merging each sub-agent** — Fix all errors before merging the next.
+- **After merging each sub-agent, typecheck the integration surface** (that agent's touched files + their importers) — enough to catch breakage early and cheaply. Fix errors before merging the next. The FULL build/typecheck/tests runs ONCE after all sub-agents are merged (see "Post-Merge Verification"), NOT after every individual merge — re-running the whole suite per-merge re-proves unchanged code (verification-scoping rule in `code-quality.md`).
 - **Only after ALL sub-agents are merged and passing** does the main agent request permission to merge into `main`/`dev`.
 
 ### Worktree Cleanup
@@ -476,10 +468,11 @@ Sub-agents merge into the **main agent's feature branch**, not into `main`/`dev`
   py ~/.ai-instructions/tools/overlap_check.py --detailed
   ```
 - **Perform Dependency Analysis** for any file overlaps — see the "Dependency Analysis" section in the global instruction files. Most overlaps are independent additions and can proceed in parallel.
-- **Each agent must register** using the workboard script:
+- **Each agent must register** using the workboard script, passing `--agent-session` (its own `agent-<id>`, same one its commits are tagged with) so concurrent agents on similar-looking work are distinguishable on the board, not just in git history:
   ```bash
   py ~/.ai-instructions/tools/workboard.py register --feature "<name>" --tool <tool> \
-      --plan <plan-path> --files "<file1,file2>" --branch <branch> --worktree <worktree-path>
+      --plan <plan-path> --files "<file1,file2>" --branch <branch> --worktree <worktree-path> \
+      --agent-session <agent-id>
   ```
 - **If waiting on a dependency**, update status via the script:
   ```bash

@@ -24,6 +24,7 @@ ai-instructions/ | project-setup.md
 ai-instructions/ | renames-and-schema-changes.md
 ai-instructions/ | supabase-operations.md
 ai-instructions/ | worktree-operations.md
+ai-instructions/ | parallelization.json
 # *.local.md = machine- or project-specific. Synced to THIS private repo so it
 # is backed up, but excluded from any PUBLIC copy of the instruction set. Real
 # project names, absolute paths, project refs and incident detail belong here —
@@ -37,6 +38,11 @@ ai-instructions/ | templates/plans/INDEX.md
 ai-instructions/ | templates/plans/phase-template.md
 ai-instructions/ | tools/*.py
 ai-instructions/ | tools/*.cmd
+ai-instructions/ | tools/agent_state/*.py
+ai-instructions/ | tools/agent_state/**
+# parallelization.json = the concurrency config read by headroom.py (gate 3 of the
+# Parallelization rule). Global agent config, belongs here.
+ai-instructions/ | parallelization.json
 
 # --- hook dirs: executable hook scripts only, no docs/notes ---
 claude/hooks/ | *.py

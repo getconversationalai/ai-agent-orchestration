@@ -7,6 +7,7 @@ import json
 import re
 import os
 import subprocess
+import hashlib
 
 
 _MSYS_PATH = re.compile(r"^/([a-zA-Z])(/.*)?$")
@@ -238,6 +239,15 @@ def main():
                 f"feature branch / worktree, not directly on `{commit_branch}`. Approve to proceed."
             )
 
+    # --- Per-agent git author identity (runs last: only reachable once every
+    # ask()/block() gate above has passed without exiting) ---
+    rewritten_command, changed = inject_agent_identity(command, data)
+    if changed:
+        allow_with_updated_command(
+            rewritten_command,
+            "Injected per-agent-session git author identity + Agent-Session trailer.",
+        )
+
     # --- Block writes to SQL approval token files (prevents Claude from forging tokens) ---
     # --- Database SQL execution — require user confirmation for WRITES only ---
     if _search_outside_quotes(r"execute_sql\.py", command):
@@ -411,13 +421,28 @@ def fetch_precedes_in_command(command, base_branch):
     """
     if os.environ.get("ALLOW_UNFETCHED_BASE_MERGE") == "1":
         return True
-    segments = re.split(r"\s*(?:&&|;)\s*", command)
+    # Backslash-newline is a shell line-continuation: join it first so a
+    # continued command (`git fetch \<newline>origin main`) stays one segment.
+    command = command.replace("\\\n", " ")
+    # Segments are separated by `&&`, `;`, OR a bare newline. Multi-line Bash
+    # scripts (the common `git fetch<newline>git push` idiom) use newline
+    # separators, NOT `&&` — splitting only on `&&`/`;` collapsed the whole
+    # script into ONE segment and false-blocked a valid preceding fetch (the
+    # single most common friction event measured). Empty segments (trailing
+    # newline, `;;`) are dropped so the "final segment" is always a real
+    # command (the gated op), not an empty string that would let a
+    # fetch-after-op slip through as a non-last segment.
+    segments = [s for s in re.split(r"\s*(?:&&|;|\n)\s*", command) if s.strip()]
     if len(segments) < 2:
         return False
-    # The operation we're gating is in the final segment(s). Every earlier
-    # segment is a candidate "preceding fetch."
+    # The operation we're gating is assumed to be in the final segment; every
+    # earlier segment is a candidate "preceding fetch."
     for seg in segments[:-1]:
         seg = seg.strip()
+        # Drop leading `VAR=value` env-assignment prefixes (e.g.
+        # `MSYS_NO_PATHCONV=1 git fetch ...`) — the git matches below are
+        # start-anchored and would otherwise miss the fetch behind the prefix.
+        seg = re.sub(r"^(?:\w+=\S+\s+)+", "", seg)
         # `git pull ...` includes a fetch
         if re.match(r"git\s+(?:-C\s+\S+\s+)?pull\b", seg):
             if "--all" in seg or re.search(rf"\b{re.escape(base_branch)}\b", seg) \
@@ -954,6 +979,133 @@ def ask(reason):
     }
     print(json.dumps(result))
     sys.exit(0)
+
+
+def allow_with_updated_command(new_command, reason):
+    """Rewrite the Bash command Claude Code will actually execute. Only ONE
+    hook on the Bash matcher may do this per the docs ('last one to finish
+    wins' if more than one rewrites the same call) — this file owns that
+    responsibility; pretooluse_git_drift_check.py (the other Bash-matched
+    hook) never touches updatedInput, so there's no conflict."""
+    result = {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "permissionDecisionReason": reason,
+            "updatedInput": {"command": new_command},
+        }
+    }
+    print(json.dumps(result))
+    sys.exit(0)
+
+
+# ============================================================
+# Per-agent git identity injection
+# ============================================================
+# Goal: every `git commit` a Claude Code agent (or sub-agent) makes carries a
+# distinct, stable author identity, so `git log --author=`/`git shortlog -sne`
+# can later separate "which Claude session/sub-agent made this commit" even
+# after the commits are replayed by a rebase+FF landing (rebase preserves the
+# original AUTHOR; only committer/date change). See project decision recorded
+# 2026-08-02: real name stays visible for team disambiguation (whose agent,
+# not just which agent), synthetic id distinguishes concurrent sessions.
+_AGENT_EMAIL_BASE = "you@example.com"
+_AGENT_REAL_NAME = "Developer"
+
+
+def _short_hash(value, length):
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()[:length]
+
+
+def _agent_identity_key(data):
+    """Build the `agent-<id>` / `agent-<id>.sub<subid>` key from this hook
+    call's own session_id (shared by a top-level agent AND every sub-agent it
+    spawns) and agent_id (present ONLY inside a sub-agent's own tool calls).
+    Returns None if session_id is missing (defensive — always present per the
+    hooks reference, but never crash a commit over it)."""
+    session_id = data.get("session_id")
+    if not session_id:
+        return None
+    key = f"agent-{_short_hash(str(session_id), 6)}"
+    agent_id = data.get("agent_id")
+    if agent_id:
+        key += f".sub{_short_hash(str(agent_id), 4)}"
+    return key
+
+
+def _split_plus_email(base_email, tag):
+    """user@domain -> user+tag@domain."""
+    local, _, domain = base_email.partition("@")
+    return f"{local}+{tag}@{domain}"
+
+
+_GIT_COMMIT_INVOCATION = re.compile(
+    r"\bgit\s+((?:-[cC]\s+\S+\s+|--\S+\s+)*)commit(?![\w-])"
+)
+
+
+def _append_trailer_to_last_dash_m(command, trailer):
+    """Append `trailer` (already `\n\n`-prefixed) to the LAST -m/--message
+    value in `command`. Only handles the common single/multi -m '...' shape;
+    heredoc/-F-sourced messages are left alone (rewriting an arbitrary heredoc
+    safely isn't worth the risk — those commits still get the identity via
+    -c user.name/user.email, just not the trailer)."""
+    matches = list(re.finditer(r"(-m|--message)(\s*=\s*|\s+)(['\"])(.*?)\3", command, re.DOTALL))
+    if not matches:
+        return command
+    m = matches[-1]
+    quote = m.group(3)
+    new_message = m.group(4) + trailer
+    # Escape the quote character we're wrapping with, so an unlucky message
+    # containing it doesn't break the rewritten command.
+    if quote == '"':
+        new_message = new_message.replace('"', '\\"')
+    else:
+        new_message = new_message.replace("'", "'\\''")
+    start, end = m.span()
+    return command[:start] + f"{m.group(1)}{m.group(2)}{quote}{new_message}{quote}" + command[end:]
+
+
+def inject_agent_identity(command, data):
+    """If `command` contains a real `git commit` invocation, rewrite it to:
+      1. pin the commit AUTHOR to a per-agent-session identity via -c flags
+         (stateless — never mutates any .git/config, so it can't leak between
+         concurrent agents sharing a worktree or repo), and
+      2. append an Agent-Session/Agent-Task trailer to the commit message
+         (best-effort; skipped for heredoc/-F-sourced messages).
+    Returns the (possibly unchanged) command; caller decides whether to emit
+    it via allow_with_updated_command."""
+    spans = _quoted_spans(command)
+    m = None
+    for cand in _GIT_COMMIT_INVOCATION.finditer(command):
+        if any(a <= cand.start() < b for a, b in spans):
+            continue
+        m = cand
+        break
+    if not m:
+        return command, False
+
+    key = _agent_identity_key(data)
+    if not key:
+        return command, False
+
+    author_name = f"{_AGENT_REAL_NAME} (Claude {key})"
+    author_email = _split_plus_email(_AGENT_EMAIL_BASE, key)
+
+    # Don't double-inject if this exact command already carries our -c flags
+    # (e.g. a retry after a prior rewrite, or an agent that read this file).
+    if f"user.email={author_email}" in command or f'user.email="{author_email}"' in command:
+        return command, False
+
+    identity_flags = f'-c user.name="{author_name}" -c user.email="{author_email}" '
+    insert_at = m.start() + len("git ")
+    new_command = command[:insert_at] + identity_flags + command[insert_at:]
+
+    branch = get_current_branch_for_command(command) or "(unknown)"
+    trailer = f"\n\nAgent-Session: {key}\nAgent-Task: {branch}"
+    new_command = _append_trailer_to_last_dash_m(new_command, trailer)
+
+    return new_command, True
 
 
 if __name__ == "__main__":

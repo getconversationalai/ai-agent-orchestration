@@ -1,4 +1,4 @@
-# ai-agent-orchestration-config
+# ai-agent-orchestration
 
 A shared instruction system and worktree-hygiene toolchain for **Claude Code, Gemini CLI, and Codex**:
 routers, instruction docs (`ai-instructions/`), project templates, coordination tools, hooks, and
@@ -51,7 +51,7 @@ Paste this into Claude Code. It handles everything except the two steps Google r
 ```text
 Please install the AI agent orchestration system on this machine.
 
-1. Clone https://github.com/ykstrategy/ai-agent-orchestration
+1. Clone https://github.com/getconversationalai/ai-agent-orchestration
    into my projects folder (ask me where that is if you can't tell).
 2. Run the repo's scripts/install-hooks.ps1, then scripts/deploy.ps1 -WhatIf,
    show me the preview, and once I approve it run scripts/deploy.ps1.
@@ -73,7 +73,7 @@ and tell me exactly what I have to do by hand afterwards.
 ### Option B — do it yourself
 
 ```bash
-git clone https://github.com/ykstrategy/ai-agent-orchestration
+git clone https://github.com/getconversationalai/ai-agent-orchestration
 cd ai-agent-orchestration-config
 
 ./scripts/install-hooks.ps1

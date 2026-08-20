@@ -69,10 +69,19 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    # Find the main repo root
-    repo_root = find_repo_root()
+    # Resolve the repo to operate on. For a single worktree path, derive the
+    # repo from the WORKTREE ITSELF — it may live under a different repo than the
+    # CWD, and a CWD-derived root makes `git worktree remove` target the wrong
+    # repository, which reports "is not a working tree" and silently no-ops the
+    # removal (leaving the worktree registered — the pileup this fix prevents).
+    # --all-merged is run per-repo, so it uses the CWD's repo.
+    if args.all_merged:
+        repo_root = find_repo_root()
+    else:
+        repo_root = repo_root_for_worktree(args.worktree_path) or find_repo_root()
     if not repo_root:
-        error("Could not find a git repository. Are you inside a git project?")
+        error("Could not find a git repository. Are you inside a git project, "
+              "or is the worktree path valid?")
 
     # Verify .git exists
     git_dir = os.path.join(repo_root, ".git")
@@ -272,7 +281,7 @@ def cleanup_one(repo_root, worktree_path, delete_branch):
     if not os.path.isdir(worktree_path):
         warn(f"Worktree directory does not exist: {worktree_path}")
         info("Running git worktree prune to clean up stale refs...")
-        run_git(["git", "worktree", "prune"], cwd=repo_root)
+        run_git(["git", "worktree", "prune", "--expire=now"], cwd=repo_root)
         return
 
     # ── Step 2b: REFUSE if the worktree has uncommitted changes ──
@@ -357,17 +366,21 @@ def cleanup_one(repo_root, worktree_path, delete_branch):
         remove_succeeded = (result.returncode == 0)
         if not remove_succeeded:
             stderr = result.stderr.strip()
-            # If the directory is already gone or not a worktree, treat as success-by-prune
+            # "is not a working tree" / "does not exist" is NOT proof the worktree
+            # is gone. With repo_root now resolved from the worktree itself this
+            # branch should be rare, but claim success only if the working
+            # directory actually disappeared. (The old code assumed the error
+            # meant "gone" and reported success even when a no-op prune left the
+            # worktree — and its registration — in place: a silent failure.)
             if "is not a working tree" in stderr or "does not exist" in stderr:
                 info(f"git worktree remove reported: {stderr}")
-                info("Running git worktree prune instead...")
-                run_git(["git", "worktree", "prune"], cwd=repo_root)
-                remove_succeeded = True
+                run_git(["git", "worktree", "prune", "--expire=now"], cwd=repo_root)
+                remove_succeeded = not os.path.isdir(worktree_path)
             else:
                 warn(f"git worktree remove failed: {stderr}")
                 warn("Junctions were already removed, so .git should be safe.")
                 # Still try to prune in case the ref is dangling
-                run_git(["git", "worktree", "prune"], cwd=repo_root)
+                run_git(["git", "worktree", "prune", "--expire=now"], cwd=repo_root)
     except subprocess.TimeoutExpired:
         # Don't crash mid-delete. Whatever directory remains is junction-free by
         # now, so remove it directly and prune the registration.
@@ -380,7 +393,7 @@ def cleanup_one(repo_root, worktree_path, delete_branch):
                 )
             except Exception as e:
                 warn(f"Manual removal failed: {e}")
-        run_git(["git", "worktree", "prune"], cwd=repo_root)
+        run_git(["git", "worktree", "prune", "--expire=now"], cwd=repo_root)
         remove_succeeded = not os.path.isdir(worktree_path)
 
     # ── Step 11: COMPREHENSIVE .git integrity check AFTER removal ──
@@ -408,7 +421,7 @@ def cleanup_one(repo_root, worktree_path, delete_branch):
             warn("Branch may not be fully merged. Delete manually with git branch -D if certain.")
 
     # ── Step 13: Prune worktree refs ──
-    run_git(["git", "worktree", "prune"], cwd=repo_root)
+    run_git(["git", "worktree", "prune", "--expire=now"], cwd=repo_root)
 
     info(f"Cleanup complete: {worktree_path}")
 
@@ -999,6 +1012,28 @@ def find_repo_root():
             return result.stdout.strip()
     except Exception:
         pass
+    return None
+
+
+def repo_root_for_worktree(worktree_path):
+    """Return the MAIN repo root that owns worktree_path, or None. The worktree
+    may live under a different repo than the CWD, so resolve from the path
+    itself: the first `worktree ` entry of `git worktree list --porcelain` run
+    inside it is always the main worktree (= repo root)."""
+    if not worktree_path:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", worktree_path, "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, timeout=15,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            return line[len("worktree "):].strip()
     return None
 
 
