@@ -1,44 +1,30 @@
 # ai-agent-orchestration
 
-A shared instruction system and worktree-hygiene toolchain for **Claude Code, Gemini CLI, and Codex**:
-routers, instruction docs (`ai-instructions/`), project templates, coordination tools, hooks, and
-scrubbed settings.
+A shared workflow that makes AI coding agents — Claude Code, Gemini CLI, and Codex — build better software, faster.
 
-**No credentials live here** (enforced by `.gitignore`, `scripts/guard-secrets.ps1`, and a pre-commit hook).
+It gives your agents the instincts of a great engineering team. They think an idea through and plan it before writing anything, and a second pass reviews that plan for problems before a line of code exists. When a job is big enough, they split it across parallel sub-agents and work the pieces at the same time instead of one after another — each in its own isolated workspace — then merge it back together without tripping over each other. They know when to build something to last and when it's fine to move fast. And they check that what they built actually works: running the tests and exercising the real system, not just trusting that it looks finished.
+
+It also knows when to slow down. Small changes move quickly; anything that touches money, security, or your users' data gets a full review and test pass, automatically, without you having to ask.
+
+It cleans up after itself, too. Every change is committed and pushed as it goes, so work is never lost; half-finished experiments and stale branches don't pile up; and you can hand your agents real independence and step away.
 
 ---
 
-## What this actually does
+## What it does
 
-Two halves that solve two different problems.
+**It plans before it builds.** Every feature starts as a plan, and the plan gets checked for problems before any code is written — the way you'd review a pull request, except the mistakes are still cheap to fix. Riskier work (anything touching payments, login, or the database) gets a dedicated reviewer whose only job is to poke holes; small changes skip the ceremony. The plan describes what to build and how to prove it works, and treats specific file names and snippets as sketches to re-check against the real code, so a plan from last week doesn't fall apart when someone moves a file.
 
-**1. Instructions — how agents are expected to behave.** Worktree isolation, git safety, planning and
-review gates, how to report work back to you in plain English, and an explicit workboard lifecycle.
-This half is pure text and works anywhere.
+**It works in parallel — when that actually helps.** When a job splits into independent pieces, agents build them at the same time, each in its own isolated workspace, then merge the results in an order picked to avoid conflicts. When the pieces depend on each other, it does them in sequence — running parallel workers on chained work is slower, not faster, and the system knows the difference. The number running at once adjusts to how busy your machine is.
 
-**2. Tooling — hygiene that does not depend on anyone remembering.** Agents create git worktrees and
-routinely abandon them: sessions end, get compacted, or crash before the tidy-up step. Left alone this
-compounds — one machine reached **120 worktrees and 13 GB of duplicated `node_modules`**. Instructions
-alone had not prevented it, because the instruction fires at the least reliable moment (the end of a
-long task) and often falls to an agent that no longer exists by then.
+**It builds things to last.** Agents reuse what's already there instead of reinventing it, structure new work so it's easy to extend, and make failures loud instead of letting them slip by unnoticed. They know when to build something properly and when a quick version is the right call. Changes that ripple across a system — renaming things, changing a database column, reshaping an API — happen in safe, reversible stages so nothing breaks halfway. Interfaces are designed for real people on real devices, phone and desktop, not a generic template.
 
-So the tooling assumes nobody will remember:
+**It proves the work is done.** "Done" means verified, not "looks done." Agents run the right tests for what changed, and check anything only a live system can confirm against the running app rather than a stand-in. Every bug fix comes with a test that locks it so it can't quietly return. After a big change, they walk the actual screens a user would touch and confirm the front end and back end still line up — nothing missing, nothing stale, nothing wired to the wrong place.
 
-| | What it does | When |
-|---|---|---|
-| **Push** | Every branch with unpushed commits goes to origin | daily + session end |
-| **Autosave** | Stray uncommitted work is committed to `wip/<branch>` and pushed | daily + session end |
-| **Purge** | `node_modules` deleted from idle worktrees — worktree and work untouched | daily |
-| **Remove** | Worktrees whose content already exists in the base branch | daily + session end |
-| **Retire** | Long-idle worktrees; the branch survives on origin | daily |
-| **Report** | Anything needing a human, at session start and by email | always |
+**It knows when to be careful.** Two dials run through everything: how much process a change gets scales to its size, and how much scrutiny it gets scales to its risk. A typo ships in seconds. Anything touching money, security, user data, or your live database gets a full review-and-test pass, automatically. The careful path is never skipped to save time, and the fast path is never buried in process it doesn't need.
 
-**The ordering is the safety model.** Push first, and a worktree stops being the only copy of anything —
-which is what makes deleting it safe. Two rules are absolute:
+**It never loses your work.** All of it runs on a safety net that assumes nobody will remember to clean up. Work is committed and pushed as it goes, so there's always a backup. Finished workspaces are cleared, abandoned ones are swept up on a schedule, and leftover files are reclaimed so your disk doesn't fill. Uncommitted work is never touched, and anything that looks like a password or key is never allowed into a backup. Point your agents at your repos, let them work, and walk away.
 
-- **A worktree with uncommitted changes is never touched.** Enforced twice, independently.
-- **Autosave refuses outright if any changed file looks like a credential.** A missed backup is
-  recoverable; a leaked key in shared history is not.
+**It reports back in plain English.** When something's done, you get a plain-language summary of what changed and how to see it yourself — not a wall of file names and commit IDs.
 
 ---
 
