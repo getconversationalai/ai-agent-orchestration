@@ -162,8 +162,9 @@ $readme = Join-Path $Destination 'README.md'
 if (Test-Path $readme) {
     $txt = Get-Content $readme -Raw
     # The private repo is named '...-config'; the public one drops that suffix.
-    # Fix the H1 whether or not -PublicRepoUrl was supplied.
-    $txt = $txt -replace '(?m)^# ai-agent-orchestration-config\b', '# ai-agent-orchestration'
+    # Replace EVERY occurrence so no private-repo name survives in the public
+    # README: the H1 title, the `cd <folder>` in the setup steps, and any prose.
+    $txt = $txt.Replace('ai-agent-orchestration-config', 'ai-agent-orchestration')
     if ($PublicRepoUrl) {
         $txt = [regex]::Replace($txt, 'https://github\.com/[^\s`)]+', $PublicRepoUrl)
         Write-Host ""
@@ -174,7 +175,7 @@ if (Test-Path $readme) {
         Write-Host "      once the public repo exists, or edit it by hand before publishing." -ForegroundColor Yellow
     }
     Set-Content -Path $readme -Value $txt -NoNewline
-    Write-Host "README H1 title normalized to '# ai-agent-orchestration'."
+    Write-Host "README normalized (private '-config' name replaced with public name)."
 }
 
 # --- scrub maintainer-specific literals from the exported tree --------------

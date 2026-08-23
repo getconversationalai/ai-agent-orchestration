@@ -8,6 +8,7 @@ sections:
   - Problem-Solving Approach
   - Post-Code Verification
   - Browser Verification
+  - Front-End Back-End Reconciliation Audit
 ---
 # Code Quality Checklist
 
@@ -202,3 +203,27 @@ browser_take_screenshot({ filename: ".playwright-mcp/landing-hero.png" })
 Equivalent Chrome DevTools tools accept similar path arguments — write all outputs under `.playwright-mcp/`. Without an explicit path, MCP servers fall back to writing files to whatever the agent's CWD is — typically the project root, which clutters the repo. `.playwright-mcp/` is gitignored on a per-project basis. Old PNGs in that folder are auto-purged by the `stop_cleanup_playwright_screenshots.py` hook (older than 10 minutes get removed each Stop event). Note: that hook is currently PNG-only — `.json` perf traces and `.heapsnapshot` files won't be auto-cleaned yet, so prune those manually if they accumulate.
 
 If the project's `.gitignore` doesn't yet include `.playwright-mcp/`, add it.
+
+## Front-End Back-End Reconciliation Audit
+
+Run this **after any major back-end change that has a connected front end** — UNPROMPTED, as part of finishing the work, not only when the user asks. "Major" = new/renamed/dropped columns, settings/config, enums, status models, pricing/billing logic, or API shape — anything a UI reads, writes, or describes.
+
+### The goal is BIDIRECTIONAL
+- **Nothing missing:** every back-end capability that should be usable has a correct, wired front-end surface (an admin can actually set/see the thing).
+- **Nothing stale:** no UI references a removed/renamed/dead back-end concept — no dead knob writing a column nothing reads, no label/copy describing the old model, no dropdown option for a retired value.
+- **Everything right:** what's present is wired correctly — correct column, correct units (dollars vs cents, % vs fraction), correct label/hint/default, form saves what the engine actually reads.
+
+### Audit by ENUMERATING PAGES, not by grepping symbols (this is the whole point)
+The weak-audit failure mode is reconciling *outward from back-end symbols* — grepping "is this column read anywhere?" That only ever finds dead code. It cannot find a confusing knob, stale copy, a missing control, or a form wired to the wrong place, because those live in the UI, not in the back-end symbol graph.
+
+Instead: **list the actual routes/pages a user touches that relate to the change, then walk each one against the back-end truth.** You must derive that page list yourself — if you find yourself needing the user to hand you URLs, you skipped this step. Cover, at minimum:
+- **Settings / config pages** — every knob: is it live (something reads it)? right units/label? any dead or duplicate knobs? copy that still describes the old model?
+- **Create / edit forms** — can the user set every current field? any field for a removed concept? any field writing a column the engine ignores? defaults match the DB/engine?
+- **Detail panels & dashboards** — do displayed numbers use the same basis the engine uses? do action buttons appear only in valid states? is any capability invisible?
+- **List views, dropdowns, steppers** — any stale enum value / status offered? labels match the current set?
+- **Invoice / email / PDF / notification surfaces** — every kind that gets sent has a label + template; notes/disclosures render where required; no template for a dead type.
+
+### Method
+- For anything large, **fan out parallel per-surface auditors** (settings, forms, detail panels, invoices/emails) — each reads its slice + reconciles against the DB/engine, returns findings typed MISSING / STALE / MIS-WIRED / JUDGMENT.
+- **Fix the clear findings directly; surface the JUDGMENT calls** (the "should this even exist?" questions that need product intent) to the user with a recommendation.
+- A finding is only "clean" once you've confirmed the surface exists AND is wired AND has no stale remnant — checking one direction is the trap.

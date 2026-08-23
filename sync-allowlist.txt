@@ -14,6 +14,7 @@
 # means adding a line here. That is the guard working, not friction.
 
 # --- ~/.ai-instructions/ : global rule docs (enumerated), templates, tools ---
+ai-instructions/ | api-mcp-first.md
 ai-instructions/ | code-quality.md
 ai-instructions/ | git-safety.md
 ai-instructions/ | hooks-reference.md
@@ -22,7 +23,10 @@ ai-instructions/ | parallel-agents.md
 ai-instructions/ | planning.md
 ai-instructions/ | project-setup.md
 ai-instructions/ | renames-and-schema-changes.md
+ai-instructions/ | security.md
+ai-instructions/ | sounding-human.md
 ai-instructions/ | supabase-operations.md
+ai-instructions/ | ui-design-standards.md
 ai-instructions/ | worktree-operations.md
 ai-instructions/ | parallelization.json
 # *.local.md = machine- or project-specific. Synced to THIS private repo so it
@@ -43,6 +47,9 @@ ai-instructions/ | tools/agent_state/**
 # parallelization.json = the concurrency config read by headroom.py (gate 3 of the
 # Parallelization rule). Global agent config, belongs here.
 ai-instructions/ | parallelization.json
+
+# --- backed-up Claude skills (the reusable, cross-project ones only) ---
+claude/skills/sounding-human/ | SKILL.md
 
 # --- hook dirs: executable hook scripts only, no docs/notes ---
 claude/hooks/ | *.py

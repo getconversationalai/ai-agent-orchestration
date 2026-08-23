@@ -1,5 +1,24 @@
 # [Project Name] — Project Scope
 
+## Product Track & Stage
+
+**Product Track: YES** (default) — *architected* to become a real product: features are built as clean, transport-agnostic capabilities so a public API + MCP are cheap to add later (`api-mcp-first.md`), with a beautiful, user-first, multi-device UI (`ui-design-standards.md`).
+<!-- Set to NO only for a genuine throwaway / prototype / experiment with no product future. When unsure, leave YES. -->
+
+**Stage: Prototype**  ← set one: **Prototype · MVP · Growth · Mature**. This gates how much you BUILD now (`api-mcp-first.md` → "Design for scale, build for stage"), NOT the architecture:
+<!--
+- Prototype / pre-users: UI + capability layer + cheap security fundamentals. DEFER the public API, MCP, heavy scalability plumbing, and full security-review apparatus. Features at their real size (usually Trivial/Small) — no spec/plan docs, no multi-agent (coder->reviewer->fix->re-review) pipeline.
+- MVP / early users: add the public API + MCP for capabilities a consumer actually needs; full security review on genuinely sensitive surfaces (auth/tenant/money).
+- Growth / Mature: new capabilities ship all three surfaces by default; full scalability + security apparatus where risk warrants.
+-->
+
+### Design Direction
+<!-- Establish BEFORE building UI (ui-design-standards.md → Step 0). Fill in:
+- Brand / tone: (e.g. calm-clinical · bold-consumer · serious-fintech · playful)
+- Users & context: (who they are, expertise, device mix, environment, accessibility needs)
+- References / guardrails: (2–3 aesthetic refs or competitors to echo/avoid; existing design system; dark mode?)
+-->
+
 ## Structure
 
 ```

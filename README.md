@@ -74,7 +74,7 @@ and tell me exactly what I have to do by hand afterwards.
 
 ```bash
 git clone https://github.com/getconversationalai/ai-agent-orchestration
-cd ai-agent-orchestration-config
+cd ai-agent-orchestration
 
 ./scripts/install-hooks.ps1
 ./scripts/deploy.ps1 -WhatIf      # preview
