@@ -318,5 +318,5 @@
   "switchModelsOnFlag": true,
   "agentPushNotifEnabled": true,
   "inputNeededNotifEnabled": true,
-  "effortLevel": "xhigh"
+  "effortLevel": "medium"
 }
