@@ -14,6 +14,7 @@
 # means adding a line here. That is the guard working, not friction.
 
 # --- ~/.ai-instructions/ : global rule docs (enumerated), templates, tools ---
+ai-instructions/ | core.md
 ai-instructions/ | api-mcp-first.md
 ai-instructions/ | code-quality.md
 ai-instructions/ | git-safety.md

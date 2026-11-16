@@ -70,10 +70,6 @@
           {
             "type": "command",
             "command": "py ~/.claude/hooks/pretooluse_bash.py"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/pretooluse_git_drift_check.py"
           }
         ]
       },
@@ -92,14 +88,6 @@
           {
             "type": "command",
             "command": "py ~/.claude/hooks/pretooluse_code.py"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/pretooluse_main_worktree_guard.py"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/autocapture.py register"
           }
         ]
       },
@@ -109,27 +97,6 @@
           {
             "type": "command",
             "command": "py ~/.claude/hooks/pretooluse_code.py"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/pretooluse_main_worktree_guard.py"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/autocapture.py register"
-          }
-        ]
-      },
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/autocapture.py debug-subagent"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/pretooluse_task_guard.py"
           }
         ]
       }
@@ -143,28 +110,6 @@
             "command": "py ~/.claude/hooks/posttooluse_write.py"
           }
         ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/posttooluse_bash.py"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/autocapture.py commit"
-          }
-        ]
-      },
-      {
-        "matcher": "TodoWrite",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/autocapture.py todo"
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [
@@ -174,10 +119,6 @@
           {
             "type": "command",
             "command": "py ~/.claude/hooks/userpromptsubmit_pushsql.py"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/userpromptsubmit_worktree_state.py"
           }
         ]
       }
@@ -188,17 +129,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py ~/.claude/hooks/sessionstart_drift_check.py"
-          },
-          {
-            "type": "command",
             "command": "bash ~/.claude/hooks/sessionstart_resource_check.sh"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.ai-instructions/tools/workboard_staleness_check.py --summary --fast",
-            "timeout": 60,
-            "statusMessage": "Checking for stale work..."
           }
         ]
       }
@@ -212,31 +143,6 @@
             "command": "py ~/.ai-instructions/tools/wip_autosave.py --here --apply",
             "timeout": 300,
             "statusMessage": "Saving work in progress..."
-          },
-          {
-            "type": "command",
-            "command": "py ~/.ai-instructions/tools/worktree_sweeper.py --here --apply --no-retire --no-purge --quiet-if-clean",
-            "timeout": 180,
-            "statusMessage": "Backing up and tidying this worktree..."
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'MAIN_WT=$(git rev-parse --show-toplevel 2>/dev/null); OTHER_WTS=$(git worktree list 2>/dev/null | grep -v \"$MAIN_WT\" 2>/dev/null); if [ -z \"$OTHER_WTS\" ]; then exit 0; fi; STALE=\"\"; while IFS= read -r line; do WT_PATH=$(echo \"$line\" | awk \"{print \\$1}\"); WT_BRANCH=$(echo \"$line\" | sed \"s/.*\\[//;s/\\].*//\"); if [ -f \"WORKBOARD.md\" ] && grep -q \"$WT_BRANCH\" WORKBOARD.md 2>/dev/null && grep -A5 \"$WT_BRANCH\" WORKBOARD.md | grep -qiE \"active|waiting\"; then continue; fi; STALE=\"$STALE\\n$line\"; done <<< \"$OTHER_WTS\"; if [ -n \"$STALE\" ]; then echo \"âš ï¸ Worktrees not referenced in WORKBOARD.md (may be stale):\"; echo -e \"$STALE\"; echo \"If these are done, run: git worktree prune\"; fi'"
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'if [ -f \"WORKBOARD.md\" ]; then echo \"Reminder: Update WORKBOARD.md â€” move completed subagent work to Completed section.\"; fi'"
-          },
-          {
-            "type": "command",
-            "command": "py ~/.claude/hooks/autocapture.py subagent-complete"
           }
         ]
       }

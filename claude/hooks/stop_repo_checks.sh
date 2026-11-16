@@ -8,7 +8,7 @@
 # Preserves ALL prior behaviors:
 #   1. .git-destroyed CRITICAL guard (safety — runs first, always)
 #   2. uncommitted-code-on-main/master warning
-#   3. WORKBOARD.md-missing warning when code changed
+#   (WORKBOARD.md warning removed: worktree/workboard routine retired)
 #   4. debug-code (console.log / debugger) scan of changed lines
 
 GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -31,11 +31,6 @@ CHANGED=$(git diff --name-only -- "${CODE_GLOBS[@]}" 2>/dev/null)
 BRANCH=$(git branch --show-current 2>/dev/null)
 if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
     echo "⚠️ You have uncommitted code changes on $BRANCH. Create a feature branch."
-fi
-
-# 3. Code changed but no WORKBOARD.md to coordinate with other agents.
-if [ ! -f "WORKBOARD.md" ]; then
-    echo "⚠️ Code changes detected but no WORKBOARD.md. Create one to coordinate with other agents."
 fi
 
 # 4. Debug code left in changed lines (only reached when code changed).
