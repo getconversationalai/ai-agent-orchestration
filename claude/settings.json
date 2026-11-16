@@ -185,7 +185,7 @@
   },
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": false,
     "github@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
@@ -195,21 +195,21 @@
     "security-guidance@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "supabase@claude-plugins-official": true,
+    "supabase@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": true,
-    "explanatory-output-style@claude-plugins-official": true,
-    "greptile@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true,
-    "stripe@claude-plugins-official": true,
-    "postman@claude-plugins-official": true,
+    "explanatory-output-style@claude-plugins-official": false,
+    "greptile@claude-plugins-official": false,
+    "hookify@claude-plugins-official": false,
+    "stripe@claude-plugins-official": false,
+    "postman@claude-plugins-official": false,
     "code-review@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "remember@claude-plugins-official": true,
     "mcp-server-dev@claude-plugins-official": true,
-    "cloudflare@claude-plugins-official": true,
-    "brightdata-plugin@claude-plugins-official": true,
+    "cloudflare@claude-plugins-official": false,
+    "brightdata-plugin@claude-plugins-official": false,
     "chrome-devtools-mcp@chrome-devtools-plugins": false,
-    "resend@claude-plugins-official": true
+    "resend@claude-plugins-official": false
   },
   "extraKnownMarketplaces": {
     "chrome-devtools-plugins": {
@@ -224,5 +224,6 @@
   "switchModelsOnFlag": true,
   "agentPushNotifEnabled": true,
   "inputNeededNotifEnabled": true,
-  "effortLevel": "medium"
+  "effortLevel": "medium",
+  "outputStyle": "Explanatory Lite"
 }

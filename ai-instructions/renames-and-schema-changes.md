@@ -31,8 +31,8 @@ The unit of safety is the **boundary**: a rename is trivial inside one compiler-
 2. **A code-side rename renames ZERO DB objects.** Every index, constraint, trigger, function signature, and function body still carries the old name until a migration you wrote and ran says otherwise. The converse also holds: a DB rename changes zero code.
 3. **Nothing destructive without a way back.** Before any step that overwrites or drops data — including indirect overwrites via trigger side-effects — either snapshot the affected column/table (`CREATE TABLE _snap_x AS SELECT …`) or confirm a restorable backup/PITR covers it. State which, in chat, before running.
 4. **Separately-deployed units never assume each other's version.** Client/server/workers deploy at different times and old clients live on in cached tabs. API-visible renames are dual-field: the server accepts AND returns both names first; consumers migrate; only then is the old name dropped.
-5. **Verification means real evidence** (see code-quality.md → Evidence Hierarchy): live calls through the real framework and the real DB, compat paths exercised with OLD inputs, catalog re-checked with catalog queries. Mocked suites and happy-path smoke tests are not evidence for boundary behavior.
-6. **This class of change always gets the full adversarial plan review** (planning.md → Plan-Review Gate) — it counts as touching migrations even when no migration file exists yet.
+5. **Verification means real evidence**: live calls through the real framework and the real DB, compat paths exercised with OLD inputs, catalog re-checked with catalog queries. Mocked suites and happy-path smoke tests are not evidence for boundary behavior.
+6. **Plan before executing.** Write the phased plan (Step 2) and review it for breakage before running anything — this counts as touching migrations even when no migration file exists yet.
 
 ## Step 0 — Classify the change (decision matrix)
 
