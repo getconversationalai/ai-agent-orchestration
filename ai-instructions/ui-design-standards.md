@@ -21,7 +21,7 @@ sections:
 
 ## When this applies
 
-- **Default = on** for any product-track project with a UI (product-track is itself the default — see `api-mcp-first.md`). A **throwaway/prototype** may opt out via `PROJECT_SCOPE.md` (*Product Track: NO*), and a backend-only/library/CLI project simply has no UI to which this applies.
+- **Default = on** for any product-track project with a UI. A **throwaway/prototype** may opt out via `PROJECT_SCOPE.md` (*Product Track: NO*), and a backend-only/library/CLI project simply has no UI to which this applies.
 - **The design INTENT is always-on; the DEPTH scales to stage.** Every UI is on-brand, user-first, and works on mobile + desktop from the first screen — cheap and non-negotiable. But exhaustive edge-state polish, full tablet/breakpoint passes, and deep a11y audits **deepen as the project matures** (`PROJECT_SCOPE.md` → *Stage*): a prototype ships clean / usable / on-brand, not gold-plated. A tiny copy tweak is Trivial; a new screen at a mature stage ships to the full bar below.
 
 ## Step 0 — design direction FIRST (ask before pixels)
@@ -76,8 +76,7 @@ Not optional polish — a beautiful UI that excludes users isn't done.
 
 ## Verify on real viewports
 
-- After any UI/runtime change, end with the standard **browser-verification** offer (`code-quality.md`) — and actually check the layout at **mobile, tablet, and desktop widths**, not just the dev window. Playwright for interaction/responsive snapshots; Lighthouse for perf + a11y.
-- The **front-end/back-end reconciliation audit** (`code-quality.md`) still applies: every capability has a correct, wired UI surface across breakpoints.
+- After any UI/runtime change, check the layout at **mobile, tablet, and desktop widths**, not just the dev window. Playwright for interaction/responsive snapshots; Lighthouse for perf + a11y.
 
 ## Per-UI checklist
 

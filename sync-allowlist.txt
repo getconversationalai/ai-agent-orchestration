@@ -14,20 +14,12 @@
 # means adding a line here. That is the guard working, not friction.
 
 # --- ~/.ai-instructions/ : global rule docs (enumerated), templates, tools ---
-ai-instructions/ | api-mcp-first.md
-ai-instructions/ | code-quality.md
-ai-instructions/ | git-safety.md
-ai-instructions/ | hooks-reference.md
-ai-instructions/ | multi-agent-coordination.md
-ai-instructions/ | parallel-agents.md
-ai-instructions/ | planning.md
-ai-instructions/ | project-setup.md
+ai-instructions/ | core.md
 ai-instructions/ | renames-and-schema-changes.md
 ai-instructions/ | security.md
 ai-instructions/ | sounding-human.md
 ai-instructions/ | supabase-operations.md
 ai-instructions/ | ui-design-standards.md
-ai-instructions/ | worktree-operations.md
 ai-instructions/ | parallelization.json
 # *.local.md = machine- or project-specific. Synced to THIS private repo so it
 # is backed up, but excluded from any PUBLIC copy of the instruction set. Real
@@ -38,8 +30,6 @@ ai-instructions/ | templates/.gitignore-additions.md
 ai-instructions/ | templates/MEMORY.md
 ai-instructions/ | templates/PROJECT_SCOPE.md
 ai-instructions/ | templates/WORKBOARD.md
-ai-instructions/ | templates/plans/INDEX.md
-ai-instructions/ | templates/plans/phase-template.md
 ai-instructions/ | tools/*.py
 ai-instructions/ | tools/*.cmd
 ai-instructions/ | tools/agent_state/*.py
@@ -50,6 +40,9 @@ ai-instructions/ | parallelization.json
 
 # --- backed-up Claude skills (the reusable, cross-project ones only) ---
 claude/skills/sounding-human/ | SKILL.md
+
+# --- custom output styles ---
+claude/output-styles/ | *.md
 
 # --- hook dirs: executable hook scripts only, no docs/notes ---
 claude/hooks/ | *.py
