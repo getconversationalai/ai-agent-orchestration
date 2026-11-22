@@ -15,7 +15,7 @@ GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 [ -z "$GIT_ROOT" ] && exit 0
 
 # 1. Safety guard: .git must exist. Runs before any short-circuit.
-if [ ! -d "$GIT_ROOT/.git" ]; then
+if [ ! -e "$GIT_ROOT/.git" ]; then  # -e: in a worktree .git is a file, not a folder
     echo "🚨 CRITICAL: .git directory has been DESTROYED at $GIT_ROOT/.git! STOP ALL WORK IMMEDIATELY. Recovery: git init && git remote add origin <url> && git fetch origin && git checkout -B main origin/main"
     exit 0
 fi

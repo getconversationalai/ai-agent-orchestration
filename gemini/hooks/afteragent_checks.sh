@@ -1,6 +1,6 @@
 #!/bin/bash
 # Global AfterAgent hook for Gemini CLI.
-# Runs after each turn: branch guard, WORKBOARD check, debug code scan.
+# Runs after each turn: branch guard, debug code scan.
 # Equivalent to Claude's Stop hooks.
 
 # Only run in git repos
@@ -17,12 +17,6 @@ if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
     if [ -n "$CHANGES" ]; then
         WARNINGS="${WARNINGS}WARNING: You have uncommitted code changes on $BRANCH. Create a feature branch.\n"
     fi
-fi
-
-# --- WORKBOARD check ---
-CHANGED=$(git diff --name-only -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.py' '*.go' '*.rs' 2>/dev/null | head -1)
-if [ -n "$CHANGED" ] && [ ! -f "WORKBOARD.md" ]; then
-    WARNINGS="${WARNINGS}WARNING: Code changes detected but no WORKBOARD.md. Create one to coordinate with other agents.\n"
 fi
 
 # --- Debug code scan ---
