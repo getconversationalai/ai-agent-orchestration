@@ -7,6 +7,9 @@
 - If an attempt fails, undo it before trying something else. Don't stack fixes.
 - Before saying something is done, run the build/typecheck/tests that cover what you changed and say what you ran and the result. If you couldn't verify something, say so plainly.
 - Stop any process you started (dev servers, watchers) when the task is done.
+- Fixing a bug: where practical, add a test that fails before the fix and passes after, so the bug can't quietly come back. If that isn't practical, say why.
+- Tests are evidence, not a hurdle. Never edit a test just to make it pass; change one only when the intended behavior changed, and say so. Tests with mocked data or a mocked database prove the logic only; database behavior, route wiring and deploys need a check against the real thing. Don't claim "nothing broke" based on tests you rewrote in the same change.
+- Supabase / PostgREST: check `error` on every database call before using `data`. A bad query (a wrong or moved column) returns `{ data: null, error }` without throwing, so `if (!data) return` silently hides the failure. This has caused multi-day production outages.
 
 ## Talking to me
 - Explain in plain English what you did and why, so a non-developer can follow. Name files only where it helps me check the work (a short "Files changed" line at the end is fine).
@@ -38,6 +41,9 @@ Docs are in `~/.ai-instructions/`. Read just the section you need.
 - One agent: work on a branch in the normal checkout. No worktree needed.
 - Several agents editing the same repo at once: each one works in its own worktree on its own branch. Only one agent (or I) merges into main.
 - Use subagents only for work that is independent and substantial, and launch them together, not one after another. A subagent that edits code gets its own worktree; read-only subagents don't need one.
+- Merge conflicts: never silently drop either side's changes. If both sides added different things, keep both. If both changed the same lines differently, show me both versions and let me decide.
+- Name new database migrations with a timestamp (`20261124_143000_description.sql`), not a sequence number, so parallel agents can't collide, unless the project already uses a different scheme.
+- On Windows, remove worktrees only with `py ~/.ai-instructions/tools/worktree_cleanup.py <path>`. `rm -rf` and `git worktree remove` can follow npm's folder links and delete `.git`.
 
 ## Project memory
 - If the repo has `PROJECT_SCOPE.md` or `MEMORY.md`, read them at the start. Add to `MEMORY.md` anything a future session would otherwise have to rediscover.
