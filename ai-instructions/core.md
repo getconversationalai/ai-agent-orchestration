@@ -22,7 +22,7 @@
 ## Safety (hooks enforce most of this)
 - Never push to, commit on, or merge into main/master without my explicit OK.
 - Never commit secrets (.env files, keys, credentials).
-- Never write to a live database (insert/update/delete, schema changes, migrations) without asking me first in a separate message. The live database is the source of truth, not the migration files.
+- Never write to a live database (insert/update/delete, schema changes, migrations) without asking me first in a separate message. The live database is the source of truth, not the migration files. Batch a release's writes into one ask that lists each in plain English, with drops and deletes flagged separately.
 - Paid, bulk or hard-to-undo actions: ask first. A question I didn't answer is not a yes.
 - Renaming or removing a database column, API field or anything other code reads: do it in steps (add the new one, move every reader, then remove the old one), never in one breaking step. Search every layer for readers.
 
@@ -44,6 +44,7 @@ Docs are in `~/.ai-instructions/`. Read just the section you need.
 - Use subagents only for work that is independent and substantial, and launch them together, not one after another. A subagent that edits code gets its own worktree; read-only subagents don't need one.
 - Merge conflicts: never silently drop either side's changes. If both sides added different things, keep both. If both changed the same lines differently, show me both versions and let me decide.
 - Name new database migrations with a timestamp (`20261124_143000_description.sql`), not a sequence number, so parallel agents can't collide, unless the project already uses a different scheme.
+- Don't use `git stash` in a repo that has worktrees (the stash is shared, so work can be lost or land in the wrong place). Commit to a branch, or copy the files aside.
 - On Windows, remove worktrees only with `py ~/.ai-instructions/tools/worktree_cleanup.py <path>`. `rm -rf` and `git worktree remove` can follow npm's folder links and delete `.git`.
 
 ## Project memory
