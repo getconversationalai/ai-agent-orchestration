@@ -1,0 +1,12 @@
+{
+  "name": "agent-orchestration",
+  "owner": { "name": "Automate Anything LLC" },
+  "metadata": { "description": "Tools for keeping AI coding agents fast and safe." },
+  "plugins": [
+    {
+      "name": "agent-setup-tuneup",
+      "source": "./plugins/agent-setup-tuneup",
+      "description": "Audit and speed up your Claude Code setup: a measured, read-only report first, then only the fixes you approve."
+    }
+  ]
+}

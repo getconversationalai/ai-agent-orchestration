@@ -22,6 +22,16 @@ Out of the box, these agents are already fast and good. Most "make the AI better
 
 ---
 
+## Speed up any Claude Code setup (shareable plugin)
+
+`plugins/agent-setup-tuneup` is a stand-alone plugin anyone can install, with or without the rest of this repo. It audits a Claude Code setup for what makes it slow or worse, measured on that person's own machine and session logs. It reports in plain English, then applies only the fixes they approve.
+
+```
+/plugin marketplace add getconversationalai/ai-agent-orchestration
+/plugin install agent-setup-tuneup@agent-orchestration
+```
+Then ask Claude: "Audit my Claude setup for speed." Details: `plugins/agent-setup-tuneup/README.md`.
+
 ## Setup
 
 ### Option A — ask Claude to do it

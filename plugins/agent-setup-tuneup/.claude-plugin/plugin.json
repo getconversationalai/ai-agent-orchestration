@@ -1,0 +1,8 @@
+{
+  "name": "agent-setup-tuneup",
+  "version": "1.0.0",
+  "description": "Audit your Claude Code setup for what makes it slow or worse (instructions, hooks, plugins, settings, and the workflow measured from your own session logs), get a ranked plain-English report, then apply only the fixes you approve.",
+  "author": { "name": "Automate Anything LLC" },
+  "license": "Apache-2.0",
+  "keywords": ["performance", "audit", "hooks", "claude-md", "setup"]
+}
