@@ -60,6 +60,8 @@ It is read-only and prints only tool names, counts and durations. Interpret it l
 - **Subagents.** More than one review per release is over-reviewing for ordinary work.
 - **Slow MCP calls.** The "unexplained" bucket means the permission mode asked. See the root-cause catalogue.
 - **Per-project tools.** These can't see hook-based or style plugins, so "unused in the scan" never means "unused".
+- **Compactions.** Many means sessions run too long or tool outputs are too big.
+- **Also measure by hand:** the always-loaded context. That's the sizes of the global and project CLAUDE.md and the memory index, plus tool definitions, every connected MCP server's tool-name list and instructions, and every skill's one-line description. It's often more than the instruction files. Check for **duplicate integrations** too: the same service connected several ways (a claude.ai connector + a local MCP server + a plugin) means duplicate tool lists.
 
 ### 3. Inventory and classify the instructions (judgement, not measurement)
 Read every always-loaded file:
