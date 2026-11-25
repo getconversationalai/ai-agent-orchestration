@@ -1,88 +1,135 @@
 ---
 name: agent-setup-tuneup
 description: >-
-  Audit and speed up an AI coding agent's own setup (CLAUDE.md / AGENTS.md / GEMINI.md, hooks,
-  plugins, settings, instruction docs). Use when the agent feels slow, over-builds, ignores
-  requests, or does a worse job than an out-of-the-box session; when asked to "audit my setup",
-  "why is Claude slow", "speed up my agents", or "tune up my instructions"; and after adding
-  a batch of new rules or hooks. Runs a read-only audit first and changes nothing until the
-  user approves the findings.
+  Audit and speed up an AI coding agent's own setup (Claude Code, Codex, Gemini): instruction files,
+  hooks, plugins, settings, and the workflow measured from session logs. Use when the agent feels
+  slow, over-builds, or does a worse job than an out-of-the-box session; when asked to "audit my
+  setup", "why is Claude slow", "speed up my agents", "are my hooks slow", or "tune up my
+  instructions"; and after adding a batch of rules or hooks. Stage 1 is a read-only, measured,
+  ranked report; Stage 2 applies only the fixes the user approves. Works on Windows, macOS, Linux, WSL.
 ---
 
 # Agent setup tune-up
 
-Out-of-the-box agents are fast and good. Setups get slow and worse as rules, hooks and plugins pile up: each mandatory step is an extra round trip, each always-loaded rule competes with the user's actual request, and contradictory rules cost reasoning on every turn. This skill finds what's costing the most and removes it while keeping the guardrails and hard-won lessons that actually prevent damage.
+Out-of-the-box agents are fast and good. Setups get slow and worse as rules, hooks and plugins pile up:
+- each mandatory step is an extra round trip
+- each always-loaded rule competes with the user's request
+- contradictions cost reasoning on every turn
+- and the biggest loss is usually the workflow itself: sessions sitting idle waiting on the user
 
-Two stages. **Stage 1 is read-only.** Stop after it and get approval before Stage 2.
+This skill measures where the time goes, removes what costs the most, and keeps the guardrails and hard-won lessons that prevent real damage.
+
+You are auditing **this user's** setup. Every finding must come from what you observe or measure here. Never assume their stack, OS or habits.
+
+## Ground rules (tell the user in one or two sentences before starting)
+- **Stage 1 is read-only.** Read settings, hooks and instruction files, and time a few harmless commands. Change nothing until the user approves specific fixes.
+- **Nothing leaves the machine.** Don't send files or probe output to any external service. The scripts never read MCP server args/env, which can hold secrets.
+- **Honest numbers.** Label every number **measured** (timed here), **estimated** (calculated or a rule of thumb), **observed** (seen in a file or process list) or **candidate** (a pattern a human must confirm).
+- **Antivirus and security software is theirs to change.** Recommend; never change it.
 
 ## Stage 1: Audit (read-only)
 
-### 1. Inventory what loads, and when
-Read the live files, not a backup copy. For Claude Code that's `~/.claude/`; also check each project's `.claude/settings.json` **and `.claude/settings.local.json`**. Local and project settings override the user level, so a plugin turned off globally (or `permissions.defaultMode`) can be switched back on per project without anyone noticing. Check every project, not just one.
+### 1. Run the probe (machine + config)
+`scripts/probe.py` in this skill's folder uses the Python 3.8+ standard library only. Find a Python: `python3`, `python`, then `py`.
+```bash
+<python> "<skill folder>/scripts/probe.py" --project "<project dir>" --out "<temp dir>/probe.json"
+```
+It takes ~10-30 s. Use its `findings` (pre-sorted) as a starting list. It also reports:
+- `timing`: the spawn floor, the hook shell, interpreter start-ups and `git status`
+- `hooks.items`: every hook from every settings layer and enabled plugin
+- `instructions.files`: what loads every session, with estimated tokens
+- `mcp`, `plugins_enabled` and `environment`
 
-| What | Where | Cost model |
-|---|---|---|
-| Global + project instructions | `~/.claude/CLAUDE.md`, `./CLAUDE.md`, `./.claude/CLAUDE.md`, every `@import` they pull in; `~/.codex/AGENTS.md`; `~/.gemini/GEMINI.md` | In context **every turn** |
-| Settings | `~/.claude/settings.json` and project `.claude/settings.json`: `effortLevel`, `modelSettings.<model>.effortLevel`, `model`, `outputStyle`, `hooks`, `enabledPlugins` | Effort = thinking time on every turn |
-| Hooks | `hooks` in each settings file | A process **per matching event** (every Bash call, every edit, every prompt) |
-| Plugins | `enabledPlugins` (user level = **every project**) | Skill/agent descriptions every session; **plugin hooks always run** (e.g. SessionStart text injection) |
-| Output style | `outputStyle`, `~/.claude/output-styles/` | Sent with every request |
-| Docs the rules say to read | anything "read X before Y" points at | Extra tool calls + context each time it triggers |
+No Python? Use the manual fallback in `reference/checklist.md`.
 
-Measure: `wc -c` of each always-loaded file; count imperatives (`grep -oiE '\b(MUST|NEVER|ALWAYS|MANDATORY|BANNED|REQUIRED)\b' | wc -l`); count hook commands per event; list enabled plugins and which ones ship hooks or MCP servers.
+**Optional, ask first:** "Want me to also time your actual hooks? I'd run each tool-call and prompt hook once with a harmless fake input. Hooks that end a turn can run tests, so those only run if you say so separately."
+- Yes → re-run with `--run-hooks`.
+- Separate yes → also add `--include-stop`.
 
-### 2. Classify every rule and hook
-Tag each one. The first four are what make agents slow or worse:
+### 2. Measure the workflow from session logs (usually the biggest finding)
+Machine latency is seconds; the workflow is hours. In one real 2-week audit, sessions sat ~150 daytime hours waiting on the user, as long as they spent working.
+```bash
+<python> "<skill folder>/scripts/session_audit.py" --days 14 [--project <substring>] --out "<temp>/sessions.json"
+```
+It is read-only and prints only tool names, counts and durations. Interpret it like this:
+- **Waits on the user.** Report the **capped** and **daytime-capped** numbers, never the raw total, because sessions overlap and waits count overnight. Give counts per release (`pushes_to_main`, approximate) and the median wait.
+- **Permission prompts.** Five or more rebase/merge prompts per release means branches merge main repeatedly instead of rebasing once.
+- **Checks.** Look at `hours_from_over10m`: a few slow outliers usually explain most of the total. `scoped_vs_whole` shows whether checks are scoped to what changed.
+- **Subagents.** More than one review per release is over-reviewing for ordinary work.
+- **Slow MCP calls.** The "unexplained" bucket means the permission mode asked. See the root-cause catalogue.
+- **Per-project tools.** These can't see hook-based or style plugins, so "unused in the scan" never means "unused".
 
-1. **Mandatory step on every task**: a ritual that turns into tool calls (register on a board, create a worktree, fetch, update a tracker item-by-item, announce steps). *Biggest speed cost: round trips multiply.*
-2. **Mandatory reading**: "read doc X before any Y", especially when one task matches several rows of an index.
-3. **Over-build bias**: "robust over minimal", "architect every feature as a layer", mandatory audits or reviews on every change. *Biggest quality cost: bigger diffs, scope creep.*
-4. **Contradiction or stale source**: two rules that disagree (e.g. "use the fast Read tool" vs "read code via `git show origin/main`"), or a rule that makes the agent read something other than the user's real local code. Conflicts with plugins count too (e.g. a plugin that forces brainstorming vs a rule that says skip it).
-5. **Situational guardrail**: fires only in a specific situation (DB write, push to main, merge conflict, migration naming). *Cheap: keep.*
-6. **Hard-won lesson**: a rule backed by a real incident ("this caused a 43h outage"). *Keep, compressed to one line.*
-7. **Default behaviour**: something the agent already does untold (read before editing, follow existing patterns). *Delete.*
+### 3. Inventory and classify the instructions (judgement, not measurement)
+Read every always-loaded file:
+- global and project CLAUDE.md / AGENTS.md / GEMINI.md, plus every `@import`
+- the memory index
+- the output style
+- any doc a rule says to "read before X"
 
-For hooks, also note: processes per tool call, hooks that run git/network on every call, hooks that deny with a long "playbook" (the agent follows the playbook instead of the task), hooks that nag every turn, and hooks that enforce rules you're about to retire.
+Check settings at **every layer**: user, user-local, project `settings.json`, **and each project's `settings.local.json`**. Local and project override user, so a plugin turned off globally, an effort level, or `permissions.defaultMode` can be quietly switched back per project. Check every project, not just one. Flag invalid permission rules (e.g. a bare `mcp__*`), which are silently ignored.
 
-### 3. Check the plugins specifically
-- User-level `enabledPlugins` apply to every project. Project-specific ones (payments, a particular DB, an email provider) belong in that project's `.claude/settings.json`.
-- Find plugins with **SessionStart hooks** that inject instructions (known examples: `superpowers` injects "you MUST use skills / brainstorm first"; `explanatory-output-style` injects 2–3 insights before and after code; `hookify` hooks every tool event). These cost every session whether used or not.
-- Invalid permission rules (e.g. a bare `mcp__*`) are silently ignored. Flag them.
-- Skills only load their name + description until used, and MCP tool definitions are deferred, so those are cheap. Hooks are not.
+Tag every rule. The first five make agents slow or worse:
+1. **Mandatory step on every task.** A ritual that becomes tool calls: register on a board, create a worktree, fetch, update a tracker item by item, announce steps. *Biggest speed cost.*
+2. **Mandatory reading.** "Read doc X before any Y", especially when one task matches several rows of an index.
+3. **Over-build or over-verify bias.** "Robust over minimal", "architect every feature as a layer", a full build or suite after every edit, mandatory audits or reviews on every change. *Biggest quality cost.*
+4. **Contradiction, stale source, or doc-vs-reality.** Two rules that fight; a rule that reads something other than the user's local code (e.g. `git show origin/main`); a rule claiming a hook does something no hook does; conflicts with plugins (e.g. one that forces brainstorming).
+5. **Waiting behaviour.** Questions one at a time, idling while a prompt is open, proceeding without batching.
+6. **Situational guardrail.** Fires only in a specific situation: DB write, push to main, merge conflict, migration naming. *Cheap: keep.*
+7. **Hard-won lesson.** Backed by a real incident ("this caused a 43h outage"). *Keep, compressed to one line.*
+8. **Default behaviour.** The agent already does it untold (read before editing, follow patterns). *Delete.*
 
-### 4. Report, ranked, then stop
-Rank findings by **how often it fires × how much it costs**, worst first. For each: file:line, what it makes the agent do, why that's slower and/or worse, and the recommended fix. Then list what you'd **keep** (guardrails and hard-won lessons). End by asking which fixes to apply. Change nothing in this stage.
+Ask before speeding a routine up whether it should exist at all.
 
-Don't overstate: you're reading files, not timing real sessions. Say so, and point to any timing logs the setup has.
+Check plugins for **SessionStart hooks** that inject text every session; these cost whether used or not. Known examples:
+- `superpowers`: "you MUST use skills / brainstorm first"
+- `explanatory-output-style`: 2-3 insights before and after code
+- `hookify`: hooks every tool event
 
-## Stage 2: Fix (after approval)
+Skill descriptions and deferred MCP tool names are cheap by comparison.
 
-Work cheapest-first, commit as you go, and keep everything reversible.
+### 4. Verify every candidate before reporting it
+The scripts pattern-match; you confirm.
+- **`heavy-hot-hook`:** open the script. Is it already scoped, debounced or cached?
+- **`dead-matcher`:** compare against the tool names you actually have (e.g. `Task` became `Agent`). A hook that never fires is a check the user *thinks* runs.
+- **`spawn-floor`:** a spiky p90 with a normal median suggests antivirus. Re-run if borderline.
+- **`leaked-processes`:** list what they are before blaming them.
 
-1. **Settings toggles.** Effort to `medium` (note: the model picker saves effort per model under `modelSettings`; the top-level `effortLevel` is legacy on newer models). Disable plugins that inject text every session. Move project-specific plugins to project settings. Replace a verbose output-style plugin with a short custom style in `~/.claude/output-styles/` (front matter: `name`, `description`, `keep-coding-instructions: true`).
-2. **One short shared instruction file.** Aim for ≤ ~60 lines, plain rules, no ceremony.
-   - Claude: `@~/.ai-instructions/core.md` in CLAUDE.md.
-   - Gemini: `@../.ai-instructions/core.md` in GEMINI.md (or `context.fileName`).
-   - Codex can't import: AGENTS.md tells it to read the file once per session.
-   - Express the speed/quality balance as: *"the smallest change that fully and correctly solves it: fix the root cause, handle the edge cases that can really happen, follow existing patterns; don't add what nobody asked for."*
-   - Keep: verification before "done", question ≠ request to act, undo failed attempts, safety asks (main, secrets, live DB writes, paid/irreversible actions), plain-English reports sized to the task.
-   - Point to detail docs **only for risky areas** (security, DB, schema changes, UI, customer-facing text), and say "read only the section you need".
-3. **Keep the hard-won lessons.** Before deleting any doc, grep it for incident language ("outage", "caused", "lost", "silently") and carry those rules into the core file as one-liners. Example lessons worth keeping: check `error` on every Supabase/PostgREST call (`{data:null, error}` doesn't throw); regression test for bug fixes; never edit a test just to pass; mocked tests don't prove DB/routing/deploy behaviour; never silently drop either side of a merge conflict; timestamp migration names for parallel agents.
-4. **Hooks.** Keep fast safety gates (regex checks are cheap). Remove hooks that enforce retired routines, inject reminders every prompt, or nag every turn. Fix false alarms (e.g. `[ -d .git ]` is wrong in a worktree, where `.git` is a file: use `-e`).
-5. **Docs.** Retire docs nothing points to anymore. Fix links in the docs you keep. Trim oversized ones to their essentials.
-6. **Parallel work.** Replace custom coordination systems with built-ins: `claude --worktree`, subagent `isolation: worktree`, and one rule ("only one agent merges into main").
+Then go through **every row** of `reference/checklist.md` and its root-cause catalogue.
 
-**Don't destroy the user's work.** These files often took real effort. Before deleting, say it's recoverable (git history, backups) and offer archiving to a non-loaded folder as an alternative.
+### 5. Report, ranked, then stop
+Write it in plain English for someone who may not know what a "hook" is, and explain terms the first time they appear. Rank by **how often it fires × how much it costs**. Use this structure:
+```
+# Agent setup audit - <date>, <OS>
+## The short version          (2-3 sentences: overall health, the single biggest win)
+## Where the time goes        (from session logs: working vs waiting hours (capped), per-release counts, outliers)
+## Biggest wins               (max 3: what's happening / evidence + label / exact fix / saving with the maths)
+## Other findings             (same shape, high -> low, with file:line)
+## Questions about your rules (quote the line; ask if it's intended. Their rules may be deliberate)
+## Keep                       (guardrails and hard-won lessons worth keeping)
+## Looked fine                (short)
+## Not checked                (what the audit couldn't see)
+```
+Make savings concrete and labelled: *"~40 ms × ~150 tool calls ≈ 6 s per session (estimated, assumes 150 calls)."* Offer to save the report as Markdown. **Then stop and ask which fixes to apply.**
 
-**Mind the sync setup.** Find the source of truth before editing: a private config repo with a public export, live home files with `capture`/`deploy` scripts, etc.
-- Edit the source of truth, or the next export/deploy will undo your work.
-- Deploy scripts usually copy without deleting, and capture scripts copy live files back. So deleted files must be removed from the live home folders too.
-- Update any allowlist/manifest for new and removed files.
-- Never commit machine-specific settings or credentials to a public repo.
+## Stage 2: Fix (only what the user approved)
+Read `reference/fixes.md` first. Work cheapest-first, commit as you go, keep everything reversible. In order:
+1. **Settings toggles:** effort, permission mode, plugins that inject text, project-specific plugins moved to project settings, output style.
+2. **Instructions:** one short shared instruction file. Before cutting a rule, check it against what Stage 1 measured.
+3. **Hard-won lessons:** carry them over before deleting any doc.
+4. **Hooks:** keep fast safety gates; remove enforcers of retired routines, every-prompt reminders and every-turn nags; fix false alarms.
+5. **Docs:** retire unreferenced docs, fix links in kept ones, trim oversized ones.
+6. **Workflow:** never idle while waiting, scope checks, budget reviews, replace parallel-work machinery with built-ins.
+
+Before deleting anything:
+- Offer to archive rather than delete; the files often took real effort.
+- Find the source-of-truth repo (private config vs public export; live files vs capture/deploy scripts) and edit that.
+- Remove retired files from the live folders too.
+- Never commit credentials or machine-specific settings to a public repo.
 
 ## Verify
-- Tests, JSON parse of every settings file, `bash -n` on changed shell hooks.
-- Run hooks once in the situations they target (including inside a worktree).
-- **Fresh-session self-check.** A new session, not an old one that still remembers the previous rules. Paste:
-  > Don't change anything. Report: (1) quote the first rule in your loaded instructions; do you see any rules about a workboard, mandatory worktrees, reading from origin/main, or brainstorm→spec→plan before coding? (2) active output style; (3) any skills from superpowers or hookify? (4) run `echo test`: did any hook output appear? (5) which plugins does this project's `.claude/settings.json` enable?
-- **Real-task test.** In another fresh session, give 2–3 ordinary tasks without mentioning testing: a question, a small bug fix, a small UI change. Compare time, steps before the first edit, change size and summary length with the old setup.
+- Run the tests, JSON-parse every settings file, run `bash -n` on changed shell hooks, and run each changed hook once in the situation it targets (including inside a worktree).
+- **Fresh-session self-check.** Use a brand-new session in the right tool (Claude Code, not Codex) that doesn't remember the old rules. Paste:
+  > Don't change anything. Report: (1) quote the first rule in your loaded instructions; do you see any rules about a workboard, mandatory worktrees, reading from origin/main, or brainstorm→spec→plan before coding? (2) active output style; (3) any skills from superpowers or hookify? (4) run `echo test`: did any hook output appear? (5) which plugins do this project's `.claude/settings.json` and `settings.local.json` enable?
+- **Real-task test.** In another fresh session, give 2-3 ordinary tasks without mentioning testing: a question, a small bug fix, a small UI or wording change.
+  - Compare with before: time, steps before the first edit, change size, summary length, interruptions and cost.
+  - Re-run `session_audit.py` after a week to confirm the waiting time actually dropped.
