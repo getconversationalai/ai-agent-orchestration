@@ -3,8 +3,16 @@
 # Surfaces disk / worktree / process drift EARLY (at #10, not #96) so the
 # silent-accumulation crisis can't recur. Fast (no `du`); fails safe (exit 0).
 
-free=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wmic logicaldisk where "DeviceID='C:'" get FreeSpace /value 2>/dev/null | tr -d '\r' | grep -o '[0-9][0-9]*' | head -1)
-free_gb=$(awk "BEGIN{printf \"%.1f\", ${free:-0}/1073741824}")
+# wmic is removed on current Windows 11, so read free space via PowerShell
+# (wmic kept as a fallback for older machines). If neither works, report the
+# disk as unknown and skip the disk warning instead of claiming 0 GB free.
+free=$(powershell -NoProfile -Command "(Get-PSDrive C).Free" 2>/dev/null | tr -d '\r' | grep -o '^[0-9][0-9]*' | head -1)
+[ -z "$free" ] && free=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wmic logicaldisk where "DeviceID='C:'" get FreeSpace /value 2>/dev/null | tr -d '\r' | grep -o '[0-9][0-9]*' | head -1)
+if [ -n "$free" ]; then
+  free_gb=$(awk "BEGIN{printf \"%.1f\", ${free}/1073741824}")
+else
+  free_gb="unknown"
+fi
 
 wt=0
 for r in /c/dev/*/; do
@@ -19,7 +27,7 @@ node=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' tasklist /fi "imagename eq nod
 echo "[resource] C: ${free_gb} GB free | worktrees: ${wt} | node procs: ${node}"
 
 warn=""
-awk "BEGIN{exit !(${free_gb} < 15)}" && warn="${warn} LOW-DISK(<15GB)"
+[ "$free_gb" != "unknown" ] && awk "BEGIN{exit !(${free_gb} < 15)}" && warn="${warn} LOW-DISK(<15GB)"
 [ "$wt" -gt 20 ]  && warn="${warn} WORKTREES(>20)"
 [ "$node" -gt 60 ] && warn="${warn} NODE-PROCS(>60)"
 

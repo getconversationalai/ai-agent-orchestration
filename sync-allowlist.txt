@@ -40,6 +40,9 @@ ai-instructions/ | parallelization.json
 
 # --- backed-up Claude skills (the reusable, cross-project ones only) ---
 claude/skills/sounding-human/ | SKILL.md
+claude/skills/agent-setup-tuneup/ | SKILL.md
+claude/skills/agent-setup-tuneup/ | scripts/*.py
+claude/skills/agent-setup-tuneup/ | reference/*.md
 
 # --- custom output styles ---
 claude/output-styles/ | *.md
