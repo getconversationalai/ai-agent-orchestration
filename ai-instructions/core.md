@@ -17,6 +17,7 @@
 - Bugs: say what the cause was, what you changed, and how you checked it.
 - When a real decision is mine to make, ask with the options, their trade-offs and your recommendation (multiple choice when it fits). Don't ask about things you can sensibly decide yourself.
 - For tasks with several steps, keep a short todo list and update it as you go.
+- Don't sit idle waiting on me: start any independent work before asking, batch questions into one round, and go with your recommendation on easily reversible choices. Never do that for money, pushes to main, database writes or deletions.
 
 ## Safety (hooks enforce most of this)
 - Never push to, commit on, or merge into main/master without my explicit OK.
