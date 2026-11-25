@@ -3,6 +3,7 @@ claude/CLAUDE.md       | ~/.claude/CLAUDE.md
 claude/settings.json   | ~/.claude/settings.json
 claude/hooks/          | ~/.claude/hooks/
 claude/skills/sounding-human/ | ~/.claude/skills/sounding-human/
+claude/skills/agent-setup-tuneup/ | ~/.claude/skills/agent-setup-tuneup/
 claude/output-styles/  | ~/.claude/output-styles/
 gemini/GEMINI.md       | ~/.gemini/GEMINI.md
 gemini/settings.json   | ~/.gemini/settings.json
