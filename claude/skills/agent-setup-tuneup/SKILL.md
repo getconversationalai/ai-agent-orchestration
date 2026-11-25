@@ -18,7 +18,7 @@ Two stages. **Stage 1 is read-only.** Stop after it and get approval before Stag
 ## Stage 1: Audit (read-only)
 
 ### 1. Inventory what loads, and when
-Read the live files, not a backup copy. For Claude Code that's `~/.claude/`; also check the project's `.claude/`.
+Read the live files, not a backup copy. For Claude Code that's `~/.claude/`; also check each project's `.claude/settings.json` **and `.claude/settings.local.json`**. Local and project settings override the user level, so a plugin turned off globally (or `permissions.defaultMode`) can be switched back on per project without anyone noticing. Check every project, not just one.
 
 | What | Where | Cost model |
 |---|---|---|
@@ -47,6 +47,7 @@ For hooks, also note: processes per tool call, hooks that run git/network on eve
 ### 3. Check the plugins specifically
 - User-level `enabledPlugins` apply to every project. Project-specific ones (payments, a particular DB, an email provider) belong in that project's `.claude/settings.json`.
 - Find plugins with **SessionStart hooks** that inject instructions (known examples: `superpowers` injects "you MUST use skills / brainstorm first"; `explanatory-output-style` injects 2–3 insights before and after code; `hookify` hooks every tool event). These cost every session whether used or not.
+- Invalid permission rules (e.g. a bare `mcp__*`) are silently ignored. Flag them.
 - Skills only load their name + description until used, and MCP tool definitions are deferred, so those are cheap. Hooks are not.
 
 ### 4. Report, ranked, then stop
