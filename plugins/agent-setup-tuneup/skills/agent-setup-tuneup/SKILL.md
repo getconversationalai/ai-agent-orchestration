@@ -26,6 +26,8 @@ You are auditing **this user's** setup. Every finding must come from what you ob
 - **Nothing leaves the machine.** Don't send files or probe output to any external service. The scripts never read MCP server args/env, which can hold secrets.
 - **Honest numbers.** Label every number **measured** (timed here), **estimated** (calculated or a rule of thumb), **observed** (seen in a file or process list) or **candidate** (a pattern a human must confirm).
 - **Antivirus and security software is theirs to change.** Recommend; never change it.
+- **Don't invent problems.** If the setup is already lean, say so plainly and keep the report short. A clean bill of health is a valid result.
+- **Shared files affect teammates.** A project's committed `.claude/settings.json`, `CLAUDE.md` or `.mcp.json` applies to everyone on that repo. Recommend personal changes in personal files (`~/.claude/`, `.claude/settings.local.json`), and flag any fix to a shared file as "affects your team: agree it first".
 
 ## Stage 1: Audit (read-only)
 

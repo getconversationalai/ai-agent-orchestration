@@ -15,7 +15,7 @@ Read this before applying fixes. Each fix is its own change. Apply only what the
 6. **Reviewer budget.** No reviews for small work. At most one plan review and one code review for risky work (money, permissions, schema, security), with a narrow brief and a ~20-minute budget.
 7. **One short shared instruction file.**
    - Aim for ≤ ~60 lines of plain rules, with no ceremony. A real rewrite went from 24 KB per tool and ~300 KB of docs to one ~5 KB core file and ~70 KB of on-demand docs.
-   - Claude imports it with `@~/.ai-instructions/core.md` in CLAUDE.md. Gemini imports it with `@../.ai-instructions/core.md` in GEMINI.md, or via `context.fileName`. Codex can't import, so AGENTS.md tells it to read the file once per session.
+   - If you use several agents, keep one shared file (e.g. `~/.ai-instructions/core.md`) and import it: Claude with `@~/.ai-instructions/core.md` in `~/.claude/CLAUDE.md`, Gemini with an `@` import in GEMINI.md (or `context.fileName`). Codex can't import, so its AGENTS.md tells it to read the file once per session. One agent only? Just keep CLAUDE.md short.
    - Express the speed/quality balance as: *"the smallest change that fully and correctly solves it: fix the root cause, handle the edge cases that can really happen, follow existing patterns; don't add what nobody asked for."*
    - Keep these:
      - verify before "done"
@@ -55,6 +55,7 @@ Read this before applying fixes. Each fix is its own change. Apply only what the
 - **Don't destroy the user's work.** These files often took real effort. Say they're recoverable (git history, backups) and offer archiving to a non-loaded folder as an alternative to deletion.
 - **Retiring a hook** means removing its `settings.json` registration, the live file AND the backup copy. A registered-but-missing hook errors on every tool call, and a leftover live file comes back on the next capture.
 - **Find the source of truth first.** If the setup lives in more than one repo (e.g. a private source of truth plus a public export), edit the source-of-truth repo too. Otherwise the next deploy or export quietly restores the old setup.
+- **A public copy can be an older export of the private source.** Editing it and deploying it overwrote months of newer private work: hardened hook guards, a DB-read fix, the release workflow and settings. Capture then saved the older versions as if they were new. Work in the source-of-truth repo. If you must start from a copy, diff it against the source first, and three-way merge (base = the copy you started from) instead of overwriting. After any capture, run the full hook test suite: a sudden wall of failures means something got overwritten.
 - **Deploy scripts usually copy without deleting**, so remove retired files from the live home folders by hand. Update any allowlist or manifest for new and removed files.
 - **Keep credentials out.** A tool config holding a token (e.g. an MCP URL with a key) is excluded or redacted, never committed. Never commit machine-specific settings to a public repo.
 - **Back up the old setup locally first.** Then judge the result with a fresh session (see Verify in SKILL.md).
