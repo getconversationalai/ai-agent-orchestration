@@ -10,7 +10,11 @@ Read this before applying fixes. Each fix is its own change. Apply only what the
    - Set effort to `medium`. The model picker saves effort per model under `modelSettings.<model>.effortLevel`; the top-level `effortLevel` is legacy on newer models.
    - Use permission mode `bypassPermissions` plus hooks that still block or ask for the risky actions. This removes the prompt cost without losing the guardrails.
    - Replace a verbose output-style plugin with a short custom style in `~/.claude/output-styles/` (front matter: `name`, `description`, `keep-coding-instructions: true`).
-4. **Fewer prompts.** Give plain DB reads an explicit `allow` in the DB hook. Batch DB writes into one plain-English approval per release.
+4. **Fewer prompts.**
+   - Give plain DB reads an explicit `allow` in the DB hook. A hook that exits silently on reads hands them to the permission mode, which asks.
+   - Make a prompt-free feature-branch rebase in one exact form (`git rebase origin/main`, backup ref first).
+   - Use one approval per release: a "ship" script that does fetch → rebase → scoped checks → fast-forward push.
+   - Batch DB writes into one plain-English approval per release.
 5. **Checks scoped to the change.** Run them once per change and once after a rebase, with a timeout. Lint every change. Run the full suite in CI instead of locally. No local production build by default.
 6. **Reviewer budget.** No reviews for small work. At most one plan review and one code review for risky work (money, permissions, schema, security), with a narrow brief and a ~20-minute budget.
 7. **One short shared instruction file.**
@@ -25,24 +29,30 @@ Read this before applying fixes. Each fix is its own change. Apply only what the
      - plain-English reports sized to the task
    - Point to detail docs **only for risky areas** (security, DB, schema changes, UI, customer-facing text), with "read only the section you need".
    - **Before cutting a rule, check it against what Stage 1 measured.** Keep the rules that fix the measured time sinks.
-8. **Keep the hard-won lessons.** Before deleting any doc, grep it for incident language ("outage", "caused", "lost", "silently", "this has") and carry those rules into the core file as one-liners. Lessons worth keeping from real setups:
+8. **Regression tests must fail first.** In a real run an agent's test passed both before and after its fix, because the fake database didn't cap rows like the real one. The rule: run the new test against the old code and confirm it fails.
+9. **Keep the hard-won lessons.** Before deleting any doc, grep it for incident language ("outage", "caused", "lost", "silently", "this has") and carry those rules into the core file as one-liners. Lessons worth keeping from real setups:
    - Check `error` on every Supabase/PostgREST call; `{data:null, error}` doesn't throw.
    - Add a regression test with bug fixes.
    - Never edit a test just to make it pass. Mocked tests don't prove DB, routing or deploy behaviour.
    - Never silently drop either side of a merge conflict.
    - Use timestamp migration names when agents work in parallel.
    - On Windows, remove worktrees only via the cleanup script. npm junctions can make `rm -rf` delete `.git`.
-9. **Memory tiers.** The always-loaded index holds only in-flight work and pointers. Lessons become rules in instruction files; shipped history moves to project docs. Real result: a 14 KB index cut to 1.7 KB.
-10. **Per-project tool lists** (Claude Code).
+10. **Memory tiers.** The always-loaded index holds only in-flight work and pointers. Lessons become rules in instruction files; shipped history moves to project docs. Real result: a 14 KB index cut to 1.7 KB.
+11. **Per-project tool lists** (Claude Code).
     - Plugins go in a project's `enabledPlugins`, personal skills in `skillOverrides`, and claude.ai connectors are switched off with per-project `disabledMcpServers` (no allowlist exists).
     - Turn project-specific plugins (payments, a particular DB, an email provider) off at the user level and on in those projects.
     - Check every project's `settings.local.json` too: it can quietly re-enable what you turned off.
     - Per-project lists apply to the repo's main folder. Sessions in **worktrees** only get them if the file is committed, so don't switch *every* plugin off globally if agents work in worktrees.
     - Per-project `.claude/settings.json` edits stay local until committed in each repo. Cloud sessions and teammates don't get them otherwise.
     - Keep hook-based plugins (e.g. a security reviewer) and the user's chosen output style on, even though usage scans never see them.
-11. **Parallel work.** Replace custom coordination systems with built-ins: `claude --worktree`, subagent `isolation: worktree`, and one rule: only one agent merges into main.
-12. **Known-issues list.** Fix or quarantine flaky tests at the root cause.
-13. **Antivirus exclusion** for the interpreter folder. This is the user's change to make.
+    - Disabling a plugin takes effect **immediately** in running sessions. Keep the connection agents actually write through, and say which one in the instructions.
+12. **Parallel work.** Replace custom coordination systems with built-ins: `claude --worktree`, subagent `isolation: worktree`, and one rule: only one agent merges into main.
+    - Moving from "every change in a worktree" to "work in the normal checkout" needs three things the worktree routine used to provide:
+      - **Keep the main checkout current.** Use a background SessionStart hook that fast-forwards a clean main. In a real test it was 70+ PRs stale, so answers and task choices were based on old code.
+      - **Install dependencies there once.** Otherwise agents can't run tests and push unverified fixes.
+      - **Enforce branch-before-first-edit.** A real test agent edited directly on main. Add a cheap check to an existing edit hook that reads `.git/HEAD` directly, with no extra process. It blocks code edits on main/master, skips unborn branches, temp dirs and the home dotfiles repo, and handles worktrees and packed refs.
+13. **Known-issues list.** Fix or quarantine flaky tests at the root cause.
+14. **Antivirus exclusion** for the interpreter folder. This is the user's change to make.
 
 ## When changing safety hooks
 - Changes must be strictly *additive* to existing guards. Add a test that the old guard list is a subset of the new one.

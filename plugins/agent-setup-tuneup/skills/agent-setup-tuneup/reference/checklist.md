@@ -80,6 +80,7 @@ Each row: what to look for -> evidence -> the usual fix. Report every row that a
 |---|---|---|
 | Start a trivial process | Windows 10-30ms; macOS/Linux 1-5ms | median above that, or p90 > 2.5x median |
 | `python -c pass` | 20-50ms | > 80ms (or the Windows `py` launcher adding 20ms+) |
+| A Python hook, `py x.py` vs `python -S x.py` (after an antivirus exclusion) | ~10-15ms apart | not worth changing on its own |
 | `node -e 0` | 40-80ms | > 150ms |
 | `bash -c true` (Git Bash on Windows) | 20-60ms | > 80ms |
 | `powershell` without `-NoProfile` | - | profile adds 100ms-1s+ |
